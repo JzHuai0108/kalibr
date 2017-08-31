@@ -1,5 +1,8 @@
 from sm import PlotCollection
 import IccPlots as plots
+import aslam_backend as aopt
+import sm
+
 import numpy as np
 import pylab as pl
 import sys
@@ -192,6 +195,76 @@ def generateReport(cself, filename="report.pdf", showOnScreen=True):
     if showOnScreen:
         plotter.show()
 
+def saveBspline(cself, filename="bspline.txt"):
+    
+    g = open(filename.replace("bspline", "ref_pose",1), 'w')
+    saveBsplineRefPose(cself, stream=g)
+    h = filename.replace("bspline", "ref_imu_meas",1)
+    saveBsplineRefImuMeas(cself, h)    
+    saveBsplineModel(cself, filename)
+
+def saveBsplineRefPose(cself, stream=sys.stdout):
+    print >> stream, "%B spline poses: time, T_w_b(txyz, qxyzw) estimated by Kalibr calibrator"
+
+    idx = 0
+    imu = cself.ImuList[idx]
+    
+    poseSplineDv = cself.poseDv
+    #compute over the time of the imu
+    times = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
+                      if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
+                      and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
+
+    timeOffsetPadding = 0.02
+  
+    for timeScalar in times:    
+        dv = aopt.Scalar(timeScalar)
+        timeExpression = dv.toExpression()
+        
+        if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
+            print >> sys.stdout, "Warn: time out of range "
+            continue
+        
+        T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
+        sm_T_w_b = sm.Transformation(T_w_b.toTransformationMatrix())
+        
+        print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_b.t())), ' '.join(map(str,sm_T_w_b.q()))
+      
+def saveBsplineRefImuMeas(cself, filename):
+    print >> sys.stdout, "saving Bspline IMU measurements time (axyz, wxyz in metric units) estimated by Kalibr calibrator"
+    print >> sys.stdout, "to ", filename
+
+    idx = 0
+    imu = cself.ImuList[idx]    
+    poseSplineDv = cself.poseDv
+    times = np.array([[im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
+                      if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
+                      and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ]])
+
+    predictedAng_body =  np.array([err.getPredictedMeasurement() for err in imu.gyroErrors])    
+    predicetedAccel_body =  np.array([err.getPredictedMeasurement() for err in imu.accelErrors])
+    print >> sys.stdout, "times ", times.shape
+    print >> sys.stdout, "ang ", predictedAng_body.shape
+    print >> sys.stdout, "accel ", predicetedAccel_body.shape    
+    whole=np.concatenate((times.T, predicetedAccel_body, predictedAng_body),axis=1)
+    np.savetxt(filename,whole, fmt=['%.9f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
+
+def saveBsplineModel(cself, filename):
+    
+    poseSpline = cself.poseDv.spline()
+    
+    knots = poseSpline.knots()    
+    coeff = poseSpline.coefficients()
+
+    print >> sys.stdout,"splineOrder", poseSpline.splineOrder(), "should be 6"
+    print >> sys.stdout,"knots length", knots.size
+    print >> sys.stdout,"coeff shape", coeff.shape
+    h = filename.replace("bspline", "coeffT",1)
+    np.savetxt(h, coeff.T, fmt='%.8f')
+    k = filename.replace("bspline", "knots",1)
+    np.savetxt(k, knots, fmt='%.8f')
+    print >> sys.stdout, "saved B spline model to ", h, " and ", k
+    
 def saveResultTxt(cself, filename='cam_imu_result.txt'):
     f = open(filename, 'w')
     printResultTxt(cself, stream=f)

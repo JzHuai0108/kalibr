@@ -711,7 +711,7 @@ class IccImu(object):
     def addGyroscopeErrorTerms(self, problem, poseSplineDv, mSigma=0.0, gyroNoiseScale=1.0, \
                                g_w=None):
         print
-        print "Adding gyroscope error terms ({0})".format(self.dataset.topic)
+        print "Adding gyroscope error terms ({0}) without misalignment ".format(self.dataset.topic)
         
         #progress bar
         iProgress = sm.Progress2( len(self.imuData) )
@@ -1012,7 +1012,7 @@ class IccScaledMisalignedImu(IccImu):
 
     def addGyroscopeErrorTerms(self, problem, poseSplineDv, mSigma=0.0, gyroNoiseScale=1.0, g_w=None):
         print
-        print "Adding gyroscope error terms ({0})".format(self.dataset.topic)
+        print "Adding gyroscope error terms ({0}) with misalignment ".format(self.dataset.topic)
         
         #progress bar
         iProgress = sm.Progress2( len(self.imuData) )

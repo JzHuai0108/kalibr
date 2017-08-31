@@ -584,6 +584,8 @@ namespace bsplines {
         
       void initConstantSpline(double t_min, double t_max, int numSegments, const Eigen::VectorXd & constant);
       
+      void saveSplineToFile(std::string knotCoeffFile);
+      bool initSplineFromFile(std::string knotCoeffFile);
     private:
       /** 
        * An internal function to find the segment of the knot sequence

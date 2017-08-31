@@ -1,6 +1,7 @@
 #include <sparse_block_matrix/sparse_block_matrix.h>
 #include <sparse_block_matrix/linear_solver_cholmod.h>
 #include <bsplines/BSpline.hpp>
+#include <iomanip> //setprecision
 #include <sm/assert_macros.hpp>
 #include <Eigen/Cholesky>
 #include <Eigen/LU>
@@ -1763,6 +1764,59 @@ Eigen::MatrixXd BSpline::segmentIntegral(int segmentIdx, const Eigen::MatrixXd &
     int BSpline::numVvCoefficients() const
     {
       return coefficients_.cols();
+    }
+
+    void BSpline::saveSplineToFile(std::string knotCoeffFile)
+    {
+      std::ofstream kcs(knotCoeffFile);
+      kcs<<"%%splineOrder knots length coefficients rows cols "<<std::endl;
+      kcs<<"%%sthen knots, then coefficients.transpose"<<std::endl;
+      kcs<< splineOrder_ <<" "<< knots_.size()<<" "<< coefficients_.rows() <<" "<< coefficients_.cols()<<std::endl;
+      kcs<< std::setprecision(8);
+      for(size_t jack=0; jack<knots_.size(); ++jack)
+        kcs<< knots_[jack]<<std::endl;
+      for(size_t jack=0; jack<coefficients_.cols(); ++jack){
+        size_t kite=0;
+        for(; kite<coefficients_.rows()-1; ++kite)
+          kcs<<coefficients_(kite,jack)<<" ";
+        kcs<<coefficients_(kite,jack)<<std::endl;       
+      }
+      kcs.close();
+    }
+    bool BSpline::initSplineFromFile(std::string knotCoeffFile)
+    { 
+      std::ifstream ifs;
+      ifs.open (knotCoeffFile, std::ifstream::in);
+      if(!ifs.is_open()){
+        std::cerr<<"Unable to open "<< knotCoeffFile<<std::endl;
+        return false;
+      }
+      std::string receptacle;
+      std::getline(ifs, receptacle);      
+      while(receptacle.find('%') != std::string::npos)
+        std::getline(ifs, receptacle);
+      std::stringstream stream(receptacle);
+      int splineOrder;
+      size_t knotsSize;
+      size_t coeffRows, coeffCols;
+      stream >> splineOrder >> knotsSize >> coeffRows >> coeffCols;
+      stream.clear();
+      knots_.resize(knotsSize);
+      
+      for(size_t jack=0; jack<knots_.size(); ++jack)
+        ifs >> knots_[jack];
+      coefficients_ = Eigen::MatrixXd(coeffRows, coeffCols);
+      for(size_t jack=0; jack<coefficients_.cols(); ++jack){        
+        for(size_t kite=0; kite<coefficients_.rows(); ++kite)
+          ifs>>coefficients_(kite,jack);          
+      }
+      ifs.close(); 
+      if(splineOrder!= splineOrder_)
+      {
+        std::cerr<<"Read a wrong splineOrder from "<< knotCoeffFile<<std::endl;
+        return false;
+      }    
+      return true;
     }
 
   } // namespace bsplines
