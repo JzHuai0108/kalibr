@@ -98,7 +98,8 @@ namespace bsplines {
       sm::kinematics::RotationalKinematics::Ptr rotation() const;
       
       Eigen::Matrix4d curveValueToTransformationAndJacobian( const Eigen::VectorXd & c, Eigen::MatrixXd * J ) const;
-
+      void savePoseSplineToFile(std::string knotCoeffFile);
+      bool initPoseSplineFromFile(std::string knotCoeffFile);
     private:      
               sm::kinematics::RotationalKinematics::Ptr rotation_;
     };

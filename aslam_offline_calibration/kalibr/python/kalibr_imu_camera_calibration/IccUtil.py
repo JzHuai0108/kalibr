@@ -1,7 +1,10 @@
 from sm import PlotCollection
 import IccPlots as plots
+
 import aslam_backend as aopt
 import sm
+import bsplines
+import aslam_splines as asp
 
 import numpy as np
 import pylab as pl
@@ -195,39 +198,51 @@ def generateReport(cself, filename="report.pdf", showOnScreen=True):
     if showOnScreen:
         plotter.show()
 
-def saveBspline(cself, filename="bspline.txt"):
+def saveBspline(cself, filename="bspline.txt"):    
     
-    g = open(filename.replace("bspline", "ref_pose",1), 'w')
-    saveBsplineRefPose(cself, stream=g)
-    h = filename.replace("bspline", "ref_imu_meas",1)
-    saveBsplineRefImuMeas(cself, h)    
-    saveBsplineModel(cself, filename)
-
-def saveBsplineRefPose(cself, stream=sys.stdout):
-    print >> stream, "%B spline poses: time, T_w_b(txyz, qxyzw) estimated by Kalibr calibrator"
-
     idx = 0
-    imu = cself.ImuList[idx]
-    
+    imu = cself.ImuList[idx]    
     poseSplineDv = cself.poseDv
     #compute over the time of the imu
     times = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
                       if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
                       and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
+    refPoseStream = open(filename.replace("bspline", "ref_pose",1), 'w')
+    saveBsplineRefPose(times, poseSplineDv, stream=refPoseStream)
+    refPoseStream.close()
+    refTimeFile = filename.replace("bspline", "ref_time",1)
+    np.savetxt(refTimeFile, times.T, fmt='%.9f')
 
-    timeOffsetPadding = 0.02
+    refImuFile = filename.replace("bspline", "ref_imu_meas",1)
+    saveBsplineRefImuMeas(cself, refImuFile) 
   
+    modelFile = filename.replace("bspline", "knotCoeffT",1) 
+    saveBsplineModel(cself, modelFile)
+    return modelFile
+
+def loadBspline(filename="knotCoeffT.txt"):
+    poseSplineDv2 = loadBsplineModel(filename)   
+    refTimeFile = filename.replace("knotCoeffT", "ref_time", 1)
+    times = np.loadtxt(refTimeFile)
+    print >> sys.stdout, "sampling starting time ", '%.9f' % times[0]
+    refPoseFile = filename.replace("knotCoeffT", "ref_posex", 1)
+    refPoseStream2 = open(refPoseFile, 'w')
+    print >> sys.stdout, "got a transformation sample ", poseSplineDv2.spline().transformation(poseSplineDv2.spline().t_min() + 1.0)
+    saveBsplineRefPose(times.T, poseSplineDv2, stream=refPoseStream2)
+    refPoseStream2.close()
+
+def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout):
+    print >> stream, "%B spline poses: time, T_w_b(txyz, qxyzw) estimated by Kalibr calibrator"
+    timeOffsetPadding = 0.02  
     for timeScalar in times:    
         dv = aopt.Scalar(timeScalar)
         timeExpression = dv.toExpression()
         
         if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
             print >> sys.stdout, "Warn: time out of range "
-            continue
-        
+            continue       
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
-        sm_T_w_b = sm.Transformation(T_w_b.toTransformationMatrix())
-        
+        sm_T_w_b = sm.Transformation(T_w_b.toTransformationMatrix())      
         print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_b.t())), ' '.join(map(str,sm_T_w_b.q()))
       
 def saveBsplineRefImuMeas(cself, filename):
@@ -249,22 +264,20 @@ def saveBsplineRefImuMeas(cself, filename):
     whole=np.concatenate((times.T, predicetedAccel_body, predictedAng_body),axis=1)
     np.savetxt(filename,whole, fmt=['%.9f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
 
-def saveBsplineModel(cself, filename):
-    
-    poseSpline = cself.poseDv.spline()
-    
-    knots = poseSpline.knots()    
-    coeff = poseSpline.coefficients()
+def saveBsplineModel(cself, filename):    
+    poseSpline = cself.poseDv.spline()    
+    print >> sys.stdout,"splineOrder", poseSpline.splineOrder(), "should be 6"    
+    poseSpline.savePoseSplineToFile(filename)   
+    print >> sys.stdout, "saved B spline model to ", filename
 
-    print >> sys.stdout,"splineOrder", poseSpline.splineOrder(), "should be 6"
-    print >> sys.stdout,"knots length", knots.size
-    print >> sys.stdout,"coeff shape", coeff.shape
-    h = filename.replace("bspline", "coeffT",1)
-    np.savetxt(h, coeff.T, fmt='%.8f')
-    k = filename.replace("bspline", "knots",1)
-    np.savetxt(k, knots, fmt='%.8f')
-    print >> sys.stdout, "saved B spline model to ", h, " and ", k
-    
+def loadBsplineModel(knotCoeffFile):
+    splineOrder = 6
+    poseSpline = bsplines.BSplinePose(splineOrder, sm.RotationVector() )
+    poseSpline.initPoseSplineFromFile(knotCoeffFile)
+    print "Initialized a pose spline with ", poseSpline.knots().size, "knots and coeff shape", poseSpline.coefficients().shape
+    poseDv = asp.BSplinePoseDesignVariable( poseSpline )
+    return poseDv
+
 def saveResultTxt(cself, filename='cam_imu_result.txt'):
     f = open(filename, 'w')
     printResultTxt(cself, stream=f)

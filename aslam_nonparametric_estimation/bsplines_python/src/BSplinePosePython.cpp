@@ -119,6 +119,8 @@ void import_bspline_pose_python()
     .def("angularVelocityBodyFrame", &BSplinePose::angularVelocityBodyFrame)
     .def("angularVelocityBodyFrameAndJacobian", &angularVelocityBodyFrameAndJacobianWrapper)
     .def("angularAccelerationBodyFrame", &BSplinePose::angularAccelerationBodyFrame)
+    .def("savePoseSplineToFile", &BSplinePose::savePoseSplineToFile)
+    .def("initPoseSplineFromFile", &BSplinePose::initPoseSplineFromFile)
     .def("angularAccelerationBodyFrameAndJacobian", &angularAccelerationBodyFrameAndJacobianWrapper)
     .def("rotation", &BSplinePose::rotation);
   //.def("", &BSplinePose::, "")

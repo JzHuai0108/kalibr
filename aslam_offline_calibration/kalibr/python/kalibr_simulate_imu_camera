@@ -124,120 +124,20 @@ def parseArgs():
 
 def main():
     # Parse the arguments
-    parsed = parseArgs();
-    
-    #logging modess
-    if parsed.verbose:
-        sm.setLoggingLevel(sm.LoggingLevel.Debug)
+    #parsed = parseArgs();
+    modelFile = "knotCoeffT.txt"
+   
+    if len(sys.argv) > 1:
+        modelFile = sys.argv[1]
     else:
-        sm.setLoggingLevel(sm.LoggingLevel.Info)
-        
-    signal.signal(signal.SIGINT, signal_exit)
-            
-    print "Initializing IMUs:"
-    if  len(parsed.imu_yamls) == 1 and not parsed.imu_models:
-        #Maintain backwards compatibility with previous interface.
-        parsed.imu_models = ['calibrated']
-    elif len(parsed.imu_yamls) != len(parsed.imu_models):
-        sm.logError("Number of IMU yamls and models has to match.")
-        sys.exit(2)
-    
-    imus = list()
-    for (imu_yaml, imu_model) in zip(parsed.imu_yamls, parsed.imu_models):
-        imuConfig = kc.ImuParameters(imu_yaml)
-        imuConfig.printDetails()
-        if imu_model == 'calibrated':
-            imus.append( sens.IccImu(imuConfig, parsed, isReferenceImu=(not imus), \
-                         estimateTimedelay=parsed.estimate_imu_delay) )
-        elif imu_model == 'scale-misalignment':
-            imus.append( sens.IccScaledMisalignedImu(imuConfig, parsed, isReferenceImu=(not imus), \
-                         estimateTimedelay=parsed.estimate_imu_delay) )
-        elif imu_model == 'scale-misalignment-size-effect':
-            imus.append( sens.IccScaledMisalignedSizeEffectImu(imuConfig, parsed, isReferenceImu=(not imus), \
-                         estimateTimedelay=parsed.estimate_imu_delay) )
-        else:
-            sm.logError("Model {0} is currently unsupported.".format(imu_model))
-            sys.exit(2)
-    
-    #load calibration target configuration 
-    targetConfig = kc.CalibrationTargetParameters(parsed.target_yaml)
-       
-    print "Initializing calibration target:"
-    targetConfig.printDetails()
-    
-    print "Initializing camera chain:"
-    chain = kc.CameraChainParameters(parsed.chain_yaml)      
-    chain.printDetails()   
-    camChain = sens.IccCameraChain(chain, targetConfig, parsed)
+        print("Usage:", sys.argv[0], "Bspline_model_filename.txt")
 
-    #create a calibrator instance
-    iCal = IccCalibrator()
-
-    #register sensors with calibrator
-    iCal.registerCamChain(camChain)
-    for imu in imus:
-        iCal.registerImu(imu)
-        if imu is not imus[0]:
-            imu.findOrientationPrior(imus[0])
-
+    print "Test loading the model and generate sample data "    
+    util.loadBspline(filename=modelFile)
+    print "Finished generating sample test"   
     print
-    print "Building the problem"
-    iCal.buildProblem(splineOrder=6, 
-                      poseKnotsPerSecond=100, 
-                      biasKnotsPerSecond=50, 
-                      doPoseMotionError=False,
-                      doBiasMotionError=True,
-                      blakeZisserCam=-1,
-                      huberAccel=-1,
-                      huberGyro=-1,
-                      noTimeCalibration=parsed.no_time,
-                      noChainExtrinsics=(not parsed.recompute_chain_extrinsics),
-                      maxIterations=parsed.max_iter,
-                      timeOffsetPadding=parsed.timeoffset_padding,
-                      verbose = parsed.verbose)
 
-    print
-    print "Before Optimization"
-    print "==================="
-    util.printErrorStatistics(iCal)
-    
-    print
-    print "Optimizing..."
-    iCal.optimize(maxIterations=parsed.max_iter, recoverCov=parsed.recover_cov)
-
-    print
-    print "After Optimization (Results)"
-    print "=================="
-    util.printErrorStatistics(iCal)
-    util.printResults(iCal, withCov=parsed.recover_cov)
-
-    print
-    bagtag = parsed.bagfile[0].translate(None, "<>:/\|?*").replace('.bag', '', 1)
-    yamlFilename = "camchain-imucam-" + bagtag + ".yaml"
-    iCal.saveCamChainParametersYaml(yamlFilename)
-    print "  Saving camera chain calibration to file: {0}".format(yamlFilename)
-
-    print
-    yamlFilename = "imu-" + bagtag + ".yaml"
-    iCal.saveImuSetParametersYaml(yamlFilename)
-    print "  Saving imu calibration to file: {0}".format(yamlFilename)
-
-    resultFileTxt = "results-imucam-" + bagtag + ".txt"
-    util.saveResultTxt(iCal, filename=resultFileTxt)
-    print "  Detailed results written to file: {0}".format(resultFileTxt)
-
-    print "Saving B spline trajectory..."
-    trajFile = "bspline-imucam-" + bagtag + ".txt"
-    modelFile = util.saveBspline(iCal, filename=trajFile)
-    print "  Bspline trajectory written to {0}".format(trajFile)
-
-    print "Generating result report..."    
-    reportFile = "report-imucam-" + bagtag + ".pdf"
-    util.generateReport(iCal, filename=reportFile, showOnScreen=not parsed.dontShowReport)
-    print "  Report written to {0}".format(reportFile)
-    print
-    
-if __name__ == "__main__":
+if __name__ == "__main__": 
     main()
 #     try:
 #         main()

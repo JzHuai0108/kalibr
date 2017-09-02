@@ -1772,9 +1772,10 @@ Eigen::MatrixXd BSpline::segmentIntegral(int segmentIdx, const Eigen::MatrixXd &
       kcs<<"%%splineOrder knots length coefficients rows cols "<<std::endl;
       kcs<<"%%sthen knots, then coefficients.transpose"<<std::endl;
       kcs<< splineOrder_ <<" "<< knots_.size()<<" "<< coefficients_.rows() <<" "<< coefficients_.cols()<<std::endl;
-      kcs<< std::setprecision(8);
+      kcs<< std::fixed << std::setprecision(9);
       for(size_t jack=0; jack<knots_.size(); ++jack)
         kcs<< knots_[jack]<<std::endl;
+      kcs<< std::fixed << std::setprecision(12);
       for(size_t jack=0; jack<coefficients_.cols(); ++jack){
         size_t kite=0;
         for(; kite<coefficients_.rows()-1; ++kite)
@@ -1801,21 +1802,23 @@ Eigen::MatrixXd BSpline::segmentIntegral(int segmentIdx, const Eigen::MatrixXd &
       size_t coeffRows, coeffCols;
       stream >> splineOrder >> knotsSize >> coeffRows >> coeffCols;
       stream.clear();
-      knots_.resize(knotsSize);
+      std::vector<double> knots(knotsSize);
+      Eigen::MatrixXd coefficients(coeffRows, coeffCols);
+          
+      for(size_t jack=0; jack<knots.size(); ++jack)
+        ifs >> knots[jack];
       
-      for(size_t jack=0; jack<knots_.size(); ++jack)
-        ifs >> knots_[jack];
-      coefficients_ = Eigen::MatrixXd(coeffRows, coeffCols);
-      for(size_t jack=0; jack<coefficients_.cols(); ++jack){        
-        for(size_t kite=0; kite<coefficients_.rows(); ++kite)
-          ifs>>coefficients_(kite,jack);          
+      for(size_t jack=0; jack<coefficients.cols(); ++jack){        
+        for(size_t kite=0; kite<coefficients.rows(); ++kite)
+          ifs>>coefficients(kite,jack);          
       }
       ifs.close(); 
       if(splineOrder!= splineOrder_)
       {
         std::cerr<<"Read a wrong splineOrder from "<< knotCoeffFile<<std::endl;
         return false;
-      }    
+      }
+      setKnotsAndCoefficients(knots, coefficients);
       return true;
     }
 
