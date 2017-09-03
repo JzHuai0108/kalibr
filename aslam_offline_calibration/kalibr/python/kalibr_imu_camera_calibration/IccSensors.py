@@ -398,6 +398,69 @@ class IccCamera():
         print "\r  Added {0} camera error terms                      ".format( len(self.targetObservations) )           
         self.allReprojectionErrors = allReprojectionErrors
 
+    def getCornersImageSample(self, poseSplineDv, T_cN_b, timeOffsetPadding=0.0):     
+        obs = self.targetObservations[0]
+        imageCornerPoints =  np.array( obs.getCornersImageFrame() ).T #2xN
+        
+        # Build a transformation expression for the time.
+        frameTime = self.cameraTimeToImuTimeDv.toExpression() + obs.time().toSec() + self.timeshiftCamToImuPrior
+        frameTimeScalar = frameTime.toScalar()
+        
+        #as we are applying an initial time shift outside the optimization so 
+        #we need to make sure that we dont add data outside the spline definition
+        if frameTimeScalar <= poseSplineDv.spline().t_min() or frameTimeScalar >= poseSplineDv.spline().t_max():
+            return np.array([])
+            
+        T_w_b = poseSplineDv.transformationAtTime(frameTime, timeOffsetPadding, timeOffsetPadding)
+        T_b_w = T_w_b.inverse()
+
+        #calibration target coords to camera N coords
+        #T_b_w: from world to imu coords
+        #T_cN_b: from imu to camera N coords
+        T_c_w = T_cN_b  * T_b_w
+        
+        print "T_c_w ", sm.Transformation(T_c_w.toTransformationMatrix()).T(), " and time ", '%.9f' % frameTimeScalar
+        print "T_w_c ", sm.Transformation(T_c_w.toTransformationMatrix()).inverse().T(), " and time ", '%.9f' % frameTimeScalar
+        targetCornerPoints = np.array( obs.getCornersTargetFrame() ).T #2xN
+        #setup an aslam frame (handles the distortion)
+        frame = self.camera.frameType()
+        frame.setGeometry(self.camera.geometry)
+            
+        #corner uncertainty
+        R = np.eye(2) * self.cornerUncertainty * self.cornerUncertainty
+        invR = np.linalg.inv(R)
+            
+        for pidx in range(0,imageCornerPoints.shape[1]):
+            #add all image points
+            k = self.camera.keypointType()
+            k.setMeasurement( imageCornerPoints[:,pidx] )
+            k.setInverseMeasurementCovariance(invR)
+            frame.addKeypoint(k)
+
+        predictedMeasurements = list()
+        error_t = self.camera.reprojectionErrorType
+        for pidx in range(0,imageCornerPoints.shape[1]):
+            #add all target points
+            targetPoint = np.insert( targetCornerPoints.transpose()[pidx], 3, 1)
+            p = T_c_w *  aopt.HomogeneousExpression( targetPoint )
+             
+            #build and append the error term
+            rerr = error_t(frame, pidx, p)
+            predictedMeas = imageCornerPoints[:,pidx] - rerr.error() #doing so is because getPredictedMeasurement is 
+            # not exported for this type of reprojectionError. Interestingly, the reprojectionError in kalibr_calibrate_cameras
+            # can getPredictedMeasurement which is exported. The reason behind this differentiation I believe is
+            #imu_camera_calibration used a templated camera reprojectionError scheme manifested by error_t
+            predictedMeasurements.append(predictedMeas)
+        predMeasArray= np.array(predictedMeasurements)
+        print "predmeasarray shape ", predMeasArray.shape, "imageCornerPoints shape", imageCornerPoints.shape
+        return np.concatenate(( predMeasArray.T, imageCornerPoints), axis=0)
+
+
+    def getCornersTargetSample(self):     
+        obs = self.targetObservations[0]
+        return np.array( obs.getCornersTargetFrame() ).T #targetCornerPoints
+
+
 #pair of cameras with overlapping field of view (perfectly synced cams required!!)
 #
 #     Sensor "chain"                    R_C1C0 source: *fixed as input from stereo calib
@@ -543,6 +606,17 @@ class IccCameraChain():
             
             #add the error terms
             cam.addCameraErrorTerms( problem, poseSplineDv, T_cN_b, blakeZissermanDf, timeOffsetPadding )
+
+    def getCornersImageSample(self, poseSplineDv, timeOffsetPadding=0.0):
+        camNr = 0
+        T_chain = self.camList[camNr].T_c_b_Dv.toExpression()
+        #from imu coords to camerea N coords (as DVs)
+        T_cN_b = T_chain         
+	return self.camList[camNr].getCornersImageSample(poseSplineDv, T_cN_b, timeOffsetPadding) 
+
+    def getCornersTargetSample(self, camNr):    
+        return self.camList[camNr].getCornersTargetSample()
+
 
 #IMU
 class IccImu(object):

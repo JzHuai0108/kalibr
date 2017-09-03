@@ -5,6 +5,7 @@ import aslam_backend as aopt
 import sm
 import bsplines
 import aslam_splines as asp
+import kalibr_common as kc
 
 import numpy as np
 import pylab as pl
@@ -208,6 +209,7 @@ def saveBspline(cself, filename="bspline.txt"):
                       if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
                       and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
     refPoseStream = open(filename.replace("bspline", "ref_pose",1), 'w')
+    print >> refPoseStream, "%B spline poses: time, T_w_b(txyz, qxyzw) estimated by Kalibr calibrator"  
     saveBsplineRefPose(times, poseSplineDv, stream=refPoseStream)
     refPoseStream.close()
     refTimeFile = filename.replace("bspline", "ref_time",1)
@@ -218,6 +220,14 @@ def saveBspline(cself, filename="bspline.txt"):
   
     modelFile = filename.replace("bspline", "knotCoeffT",1) 
     saveBsplineModel(cself, modelFile)
+    
+    camNr = 0
+    imageCornerPoints = cself.CameraChain.getCornersImageSample(poseSplineDv, 0.0).T
+    targetCornerPoints = cself.CameraChain.getCornersTargetSample(camNr).T
+    sampleImageCorners = filename.replace("bspline", "sampleImageCorners",1)
+    sampleTargetCorners = filename.replace("bspline", "sampleTargetCorners",1)
+    np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f'])
+    np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
     return modelFile
 
 def loadBspline(filename="knotCoeffT.txt"):
@@ -228,11 +238,20 @@ def loadBspline(filename="knotCoeffT.txt"):
     refPoseFile = filename.replace("knotCoeffT", "ref_posex", 1)
     refPoseStream2 = open(refPoseFile, 'w')
     print >> sys.stdout, "got a transformation sample ", poseSplineDv2.spline().transformation(poseSplineDv2.spline().t_min() + 1.0)
-    saveBsplineRefPose(times.T, poseSplineDv2, stream=refPoseStream2)
+    
+    chainYaml = filename.replace("knotCoeffT", "camchain", 1)
+    chainYaml = chainYaml.replace(".txt", ".yaml", 1)
+    print "Reading camera chain:", chainYaml
+    chain = kc.CameraChainParameters(chainYaml)  
+    chain.printDetails()
+    camNr=0
+    T_c0_imu = chain.getExtrinsicsImuToCam(camNr)  
+    print >> refPoseStream2, "%B spline poses: time, T_w_c(txyz, qxyzw) estimated by Kalibr calibrator"  
+    saveBsplineRefPose(times.T, poseSplineDv2, stream=refPoseStream2, T_b_c=T_c0_imu.inverse())
     refPoseStream2.close()
 
-def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout):
-    print >> stream, "%B spline poses: time, T_w_b(txyz, qxyzw) estimated by Kalibr calibrator"
+def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
+    
     timeOffsetPadding = 0.02  
     for timeScalar in times:    
         dv = aopt.Scalar(timeScalar)
@@ -242,8 +261,8 @@ def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout):
             print >> sys.stdout, "Warn: time out of range "
             continue       
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
-        sm_T_w_b = sm.Transformation(T_w_b.toTransformationMatrix())      
-        print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_b.t())), ' '.join(map(str,sm_T_w_b.q()))
+        sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c     
+        print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str,sm_T_w_c.q()))
       
 def saveBsplineRefImuMeas(cself, filename):
     print >> sys.stdout, "saving Bspline IMU measurements time (axyz, wxyz in metric units) estimated by Kalibr calibrator"

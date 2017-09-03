@@ -656,3 +656,10 @@ class CameraChainParameters(ParametersBase):
             except:
                 print >> dest, "  baseline: no data available"
                 pass
+            #print T_cam_imu if available
+            try:
+                T = self.getExtrinsicsImuToCam(camNr)
+                print >> dest, "  T_cam_imu:", T.T()
+            except:
+                print >> dest, "  T_cam_imu: no data available"
+                pass
