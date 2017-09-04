@@ -64,6 +64,13 @@ class GridCalibrationTargetObservation {
 
   /// \brief update an image observation
   void updateImagePoint(size_t i, const Eigen::Vector2d & point);
+  
+  /// \brief project a target point i, used ONLY for simulation
+  bool projectATargetPoint(const boost::shared_ptr<CameraGeometryBase> cameraGeometry,
+                           const sm::kinematics::Transformation & T_t_c,
+                           const size_t i, cv::Point2f &outPointReproj) const;
+
+  unsigned int getTotalTargetPoint() const;
 
   /// \brief remove an image observation
   void removeImagePoint(size_t i);

@@ -185,6 +185,23 @@ Eigen::MatrixXd getCornerReprojection(aslam::cameras::GridCalibrationTargetObser
   return cornersReprojEigen;
 }
 
+/// \brief get all corners in image frame coordinates (order matches getObservedTargetFrame)
+Eigen::MatrixXd projectATargetPoint(aslam::cameras::GridCalibrationTargetObservation * frame, const boost::shared_ptr<aslam::cameras::CameraGeometryBase> cameraGeometry, 
+const sm::kinematics::Transformation & T_t_c, const size_t i) {
+  
+  cv::Point2f outPointReproj;
+  bool isValid = frame->projectATargetPoint(cameraGeometry, T_t_c, i, outPointReproj);
+
+  // Convert all image corners to eigen
+  Eigen::MatrixXd cornersReprojEigen = Eigen::MatrixXd::Zero(3,1);
+
+  cornersReprojEigen(0) = outPointReproj.x;
+  cornersReprojEigen(1) = outPointReproj.y;
+  cornersReprojEigen(2) = int(isValid)*1.f;
+
+  return cornersReprojEigen;
+}
+
 /// \brief get the point index of all (observed) corners (order corresponds to the output of getCornersImageFrame and getCornersTargetFrame)
 Eigen::VectorXi getCornersIdx(
     aslam::cameras::GridCalibrationTargetObservation * frame) {
@@ -303,6 +320,7 @@ void exportGridCalibration() {
     .def("getCornersImageFrame", &getCornersImageFrame)
     .def("getCornersIdx", &getCornersIdx)
     .def("getCornerReprojection", &getCornerReprojection)
+    .def("projectATargetPoint", &projectATargetPoint)
     .def("getImage", &getImage)
     .def("setImage", &setImage)
     .def("clearImage", &GridCalibrationTargetObservation::clearImage)
@@ -310,8 +328,9 @@ void exportGridCalibration() {
     .def("imagePoint", &imagePoint)
     .def("imageGridPoint", &imageGridPoint)
     .def("imRows", &GridCalibrationTargetObservation::imRows)
+    .def("getTotalTargetPoint", &GridCalibrationTargetObservation::getTotalTargetPoint)
     .def("imCols", &GridCalibrationTargetObservation::imCols)
-    .def("updateImagePoint", &GridCalibrationTargetObservation::updateImagePoint)
+    .def("updateImagePoint", &GridCalibrationTargetObservation::updateImagePoint)    
     .def("removeImagePoint", &GridCalibrationTargetObservation::removeImagePoint)
     .def("target", target)
     .def("T_t_c", &GridCalibrationTargetObservation::T_t_c, return_value_policy<copy_const_reference>())

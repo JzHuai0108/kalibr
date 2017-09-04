@@ -2,6 +2,8 @@ from sm import PlotCollection
 import IccPlots as plots
 
 import aslam_backend as aopt
+import aslam_cv as acv
+import aslam_cameras_april as acv_april
 import sm
 import bsplines
 import aslam_splines as asp
@@ -204,16 +206,24 @@ def saveBspline(cself, filename="bspline.txt"):
     idx = 0
     imu = cself.ImuList[idx]    
     poseSplineDv = cself.poseDv
-    #compute over the time of the imu
-    times = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
+    timeList = list()
+    for obs in cself.CameraChain.camList[0].targetObservations:
+        # Build a transformation expression for the time.
+        frameTime = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toExpression() + obs.time().toSec() + cself.CameraChain.camList[0].timeshiftCamToImuPrior
+        frameTimeScalar = frameTime.toScalar()
+        timeList.append(frameTimeScalar)
+    camTimes = np.array(timeList)
+
+    imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
                       if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
                       and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
+
     refPoseStream = open(filename.replace("bspline", "ref_pose",1), 'w')
     print >> refPoseStream, "%B spline poses: time, T_w_b(txyz, qxyzw) estimated by Kalibr calibrator"  
-    saveBsplineRefPose(times, poseSplineDv, stream=refPoseStream)
+    saveBsplineRefPose(imuTimes, poseSplineDv, stream=refPoseStream)
     refPoseStream.close()
-    refTimeFile = filename.replace("bspline", "ref_time",1)
-    np.savetxt(refTimeFile, times.T, fmt='%.9f')
+    refTimeFile = filename.replace("bspline", "ref_camera_time",1)
+    np.savetxt(refTimeFile, camTimes.T, fmt='%.9f')
 
     refImuFile = filename.replace("bspline", "ref_imu_meas",1)
     saveBsplineRefImuMeas(cself, refImuFile) 
@@ -226,15 +236,15 @@ def saveBspline(cself, filename="bspline.txt"):
     targetCornerPoints = cself.CameraChain.getCornersTargetSample(camNr).T
     sampleImageCorners = filename.replace("bspline", "sampleImageCorners",1)
     sampleTargetCorners = filename.replace("bspline", "sampleTargetCorners",1)
-    np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f'])
+    np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
     np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
     return modelFile
 
-def loadBspline(filename="knotCoeffT.txt"):
+def loadBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml"):
     poseSplineDv2 = loadBsplineModel(filename)   
-    refTimeFile = filename.replace("knotCoeffT", "ref_time", 1)
-    times = np.loadtxt(refTimeFile)
-    print >> sys.stdout, "sampling starting time ", '%.9f' % times[0]
+    refTimeFile = filename.replace("knotCoeffT", "ref_camera_time", 1)
+    camTimes = np.loadtxt(refTimeFile)
+    print >> sys.stdout, "sampling starting time ", '%.9f' % camTimes[0]
     refPoseFile = filename.replace("knotCoeffT", "ref_posex", 1)
     refPoseStream2 = open(refPoseFile, 'w')
     print >> sys.stdout, "got a transformation sample ", poseSplineDv2.spline().transformation(poseSplineDv2.spline().t_min() + 1.0)
@@ -247,12 +257,71 @@ def loadBspline(filename="knotCoeffT.txt"):
     camNr=0
     T_c0_imu = chain.getExtrinsicsImuToCam(camNr)  
     print >> refPoseStream2, "%B spline poses: time, T_w_c(txyz, qxyzw) estimated by Kalibr calibrator"  
-    saveBsplineRefPose(times.T, poseSplineDv2, stream=refPoseStream2, T_b_c=T_c0_imu.inverse())
+    saveBsplineRefPose(camTimes.T, poseSplineDv2, stream=refPoseStream2, T_b_c=T_c0_imu.inverse())
     refPoseStream2.close()
+
+    # simulate some camera observations
+    #TODO: generalize the following by referencing 
+    #grid = setupCalibrationTarget(self, targetConfig, showExtraction=False, showReproj=False, imageStepping=False):
+    
+    #load calibration target configuration     
+    targetConfig = kc.CalibrationTargetParameters(targetYaml)
+    targetParams = targetConfig.getTargetParams()
+    print "Initializing calibration target:"
+    targetConfig.printDetails()
+    options = acv_april.AprilgridOptions()
+    options.showExtractionVideo = False
+    options.minTagsForValidObs = int( np.max( [targetParams['tagRows'], targetParams['tagCols']] ) + 1 )
+            
+    grid = acv_april.GridCalibrationTargetAprilgrid(targetParams['tagRows'],
+                                                            targetParams['tagCols'], 
+                                                            targetParams['tagSize'], 
+                                                            targetParams['tagSpacing'], 
+                                                            options)
+    simulatedObs = acv.GridCalibrationTargetObservation(grid) #this line should work though 
+    # in the constructor GridCalibrationTargetObservation(GridCalibrationTarget::Ptr) is
+    # inconsistent with GridCalibrationTargetBase::Ptr
+    
+    camConfig = chain.getCameraParameters(camNr)
+    camera = kc.AslamCamera.fromParameters( camConfig)
+
+    # get the GS camera observations
+    sm_T_w_c= getCameraPoseAt(camTimes[0], poseSplineDv2, T_b_c=T_c0_imu.inverse())
+    print >> sys.stdout, '%.9f' % camTimes[0], ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str,sm_T_w_c.q()))
+    simulatedObs.set_T_t_c(sm_T_w_c)
+    v2Point = np.array([[0],[0]])
+    imageCornerProjected= list()
+    print "total corners ", simulatedObs.getTotalTargetPoint()
+    print "image rows ", simulatedObs.imRows()
+    
+    lineDelay = 20e-3/480
+    for iota in range(0, simulatedObs.getTotalTargetPoint(), 1):
+        # get the initial observation  
+        lastImagePoint = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_c, iota) #3x1, this is GS camera model
+        print "image point ", lastImagePoint.T 
+        numIter = 0       
+        while numIter < 5:
+            currTime = lastImagePoint[1, 0]*lineDelay + camTimes[0]
+            print "currtime ", '%.9f' % currTime
+            sm_T_w_cx= getCameraPoseAt(currTime, poseSplineDv2, T_b_c=T_c0_imu.inverse())
+            imagePoint = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_cx, iota)
+            print "image point ", imagePoint.T
+            
+            if(np.linalg.norm(lastImagePoint - imagePoint) < 1e-3):
+                break
+            numIter += 1
+            lastImagePoint = imagePoint
+        print 
+    	imageCornerProjected.append(imagePoint)       
+        
+    imageCornerProjectedArray = np.array(imageCornerProjected)
+    reproducedImageCornerFile = filename.replace("knotCoeffT", "regenerated_corners", 1)
+    print "reproducedImageCorner shape ", imageCornerProjectedArray.shape
+    np.savetxt(reproducedImageCornerFile, imageCornerProjectedArray, fmt=['%.9f', '%.9f', '%d'])
 
 def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
     
-    timeOffsetPadding = 0.02  
+    timeOffsetPadding = 0.0  
     for timeScalar in times:    
         dv = aopt.Scalar(timeScalar)
         timeExpression = dv.toExpression()
@@ -264,6 +333,20 @@ def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transfor
         sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c     
         print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str,sm_T_w_c.q()))
       
+def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c=sm.Transformation()):
+    timeOffsetPadding = 0.0  
+      
+    dv = aopt.Scalar(timeScalar)
+    timeExpression = dv.toExpression()
+        
+    if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
+        print >> sys.stdout, "Warn: time out of range "
+        return sm.Transformation()
+       
+    T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
+    sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c  
+    return sm_T_w_c
+
 def saveBsplineRefImuMeas(cself, filename):
     print >> sys.stdout, "saving Bspline IMU measurements time (axyz, wxyz in metric units) estimated by Kalibr calibrator"
     print >> sys.stdout, "to ", filename

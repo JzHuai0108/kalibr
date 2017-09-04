@@ -126,14 +126,14 @@ def main():
     # Parse the arguments
     #parsed = parseArgs();
     modelFile = "knotCoeffT.txt"
-   
+    targetFile = "/media/jhuai/Seagate/data/kalibr_cam_imu_dynamic/april_6x6.yaml"
     if len(sys.argv) > 1:
         modelFile = sys.argv[1]
     else:
         print("Usage:", sys.argv[0], "Bspline_model_filename.txt")
 
     print "Test loading the model and generate sample data "    
-    util.loadBspline(filename=modelFile)
+    util.loadBspline(filename=modelFile, targetYaml=targetFile)
     print "Finished generating sample test"   
     print
 

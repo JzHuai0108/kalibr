@@ -126,6 +126,34 @@ unsigned int GridCalibrationTargetObservation::getCornerReprojection(const boost
   return cntCorners;
 }
 
+bool GridCalibrationTargetObservation::projectATargetPoint(const boost::shared_ptr<CameraGeometryBase> cameraGeometry,
+                                                                   const sm::kinematics::Transformation & T_t_c,
+                                                                   const size_t i, cv::Point2f &outPointReproj) const
+{    
+  cv::Point3f targetPoint(_target->point(i)[0], _target->point(i)[1], 0.0);
+  
+  Eigen::Vector2d cornersReproj;
+
+  //reproject
+  Eigen::Vector3d p(targetPoint.x, targetPoint.y, targetPoint.z);
+  Eigen::VectorXd pReproj = T_t_c.inverse() * p;
+  Eigen::VectorXd pReprojImg;
+
+  //handle camera geometry
+  bool isValid = cameraGeometry->vsEuclideanToKeypoint(pReproj, pReprojImg);
+
+  //store points
+  outPointReproj.x = pReprojImg(0);
+  outPointReproj.y = pReprojImg(1);    
+  return isValid;
+}
+
+unsigned int GridCalibrationTargetObservation::getTotalTargetPoint() const
+{
+  //max. number of corner in the grid
+  return _target->size();
+}
+
 /// \brief get the point index of all (observed) corners (order corresponds to the output of getCornersImageFrame and getCornersTargetFrame)
 ///        returns the number of observed corners
 unsigned int GridCalibrationTargetObservation::getCornersIdx(

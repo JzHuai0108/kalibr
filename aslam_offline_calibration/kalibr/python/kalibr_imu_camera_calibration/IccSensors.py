@@ -453,7 +453,8 @@ class IccCamera():
             predictedMeasurements.append(predictedMeas)
         predMeasArray= np.array(predictedMeasurements)
         print "predmeasarray shape ", predMeasArray.shape, "imageCornerPoints shape", imageCornerPoints.shape
-        return np.concatenate(( predMeasArray.T, imageCornerPoints), axis=0)
+        imageCornerProjected =  np.array( obs.getCornerReprojection(self.camera.geometry)).T #2xN
+        return np.concatenate(( predMeasArray.T, imageCornerProjected, imageCornerPoints), axis=0)
 
 
     def getCornersTargetSample(self):     
