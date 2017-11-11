@@ -131,6 +131,7 @@ def main():
         modelFile = sys.argv[1]
     else:
         print("Usage:", sys.argv[0], "Bspline_model_filename.txt")
+        sys.exit(-1)
 
     print "Test loading the model and generate sample data "    
     util.loadBspline(filename=modelFile, targetYaml=targetFile)

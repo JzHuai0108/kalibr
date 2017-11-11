@@ -290,11 +290,15 @@ def loadBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml"):
     print >> sys.stdout, '%.9f' % camTimes[0], ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str,sm_T_w_c.q()))
     simulatedObs.set_T_t_c(sm_T_w_c)
     v2Point = np.array([[0],[0]])
-    imageCornerProjected= list()
+    
     print "total corners ", simulatedObs.getTotalTargetPoint()
     print "image rows ", simulatedObs.imRows()
     
     lineDelay = 20e-3/480
+    
+    print "Naive method"
+    # this method is not proved to converge, but performs as good as Newton's method empirically
+    imageCornerProjected= list()
     for iota in range(0, simulatedObs.getTotalTargetPoint(), 1):
         # get the initial observation  
         lastImagePoint = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_c, iota) #3x1, this is GS camera model
@@ -302,22 +306,63 @@ def loadBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml"):
         numIter = 0       
         while numIter < 5:
             currTime = lastImagePoint[1, 0]*lineDelay + camTimes[0]
-            print "currtime ", '%.9f' % currTime
+            
             sm_T_w_cx= getCameraPoseAt(currTime, poseSplineDv2, T_b_c=T_c0_imu.inverse())
             imagePoint = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_cx, iota)
             print "image point ", imagePoint.T
+            delta = np.absolute(lastImagePoint[1,0] - imagePoint[1,0])
             
-            if(np.linalg.norm(lastImagePoint - imagePoint) < 1e-3):
-                break
             numIter += 1
             lastImagePoint = imagePoint
+            if(delta < 1e-3):
+                break
         print 
-    	imageCornerProjected.append(imagePoint)       
-        
+    	imageCornerProjected.append(lastImagePoint) 
+
+    print
+    
+    print "Newton method"
+    print
+    imageCornerProjected2 = list()
+    for iota in range(0, simulatedObs.getTotalTargetPoint(), 1):
+        # get the initial observation  
+        lastImagePoint = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_c, iota) #3x1, this is GS camera model
+        print "image point ", lastImagePoint.T 
+        numIter = 0       
+        # solve y=g(y) where y is the vertical projection in pixels
+        while numIter < 5:
+            # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
+
+            # compute g(y_0)
+            currTime = lastImagePoint[1, 0]*lineDelay + camTimes[0]
+            sm_T_w_cx= getCameraPoseAt(currTime, poseSplineDv2, T_b_c=T_c0_imu.inverse())
+            imagePoint0 = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_cx, iota)
+            
+            # compute Jacobian of g(y) relative to y at y_0
+            eps = 1
+            currTime = (lastImagePoint[1, 0] + eps)*lineDelay + camTimes[0]
+            sm_T_w_cx= getCameraPoseAt(currTime, poseSplineDv2, T_b_c=T_c0_imu.inverse())
+            imagePoint1 = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_cx, iota)
+            jacob = (imagePoint1[1, 0] - imagePoint0[1, 0])/eps
+            
+            # compute y_1
+            lastImagePoint[0, 0] = imagePoint0[0, 0]    
+            delta = imagePoint0[1, 0] - lastImagePoint[1, 0]        
+            lastImagePoint[1, 0] = lastImagePoint[1, 0] - (imagePoint0[1, 0] - lastImagePoint[1, 0])/(jacob - 1)
+            numIter += 1
+            print "image point ", imagePoint0.T
+            if(np.absolute(delta) < 1e-4):
+                break          
+            
+        print 
+    	imageCornerProjected2.append(lastImagePoint)      
+
+    imageCornerProjectedArray2 = np.array(imageCornerProjected2)
+
     imageCornerProjectedArray = np.array(imageCornerProjected)
     reproducedImageCornerFile = filename.replace("knotCoeffT", "regenerated_corners", 1)
     print "reproducedImageCorner shape ", imageCornerProjectedArray.shape
-    np.savetxt(reproducedImageCornerFile, imageCornerProjectedArray, fmt=['%.9f', '%.9f', '%d'])
+    np.savetxt(reproducedImageCornerFile, np.concatenate((imageCornerProjectedArray[:,:,0], imageCornerProjectedArray2[:,:,0]),axis=1), fmt=['%.9f', '%.9f', '%d', '%.9f', '%.9f', '%d'])
 
 def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
     
