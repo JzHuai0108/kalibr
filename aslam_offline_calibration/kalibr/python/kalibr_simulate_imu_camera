@@ -126,15 +126,17 @@ def main():
     # Parse the arguments
     #parsed = parseArgs();
     modelFile = "knotCoeffT.txt"
-    targetFile = "/media/jhuai/Seagate/data/kalibr_cam_imu_dynamic/april_6x6.yaml"
-    if len(sys.argv) > 1:
+    targetFile = "april_6x6.yaml"
+    if len(sys.argv) == 2:
         modelFile = sys.argv[1]
+    elif len(sys.argv) == 3:
+        script, modelFile, targetFile = sys.argv
     else:
-        print("Usage:", sys.argv[0], "Bspline_model_filename.txt")
+        print "Usage:", sys.argv[0], "knotCoeffT.txt(Bspline_model) calibration_target.yaml"
         sys.exit(-1)
 
     print "Test loading the model and generate sample data "    
-    util.loadBspline(filename=modelFile, targetYaml=targetFile)
+    util.simulateRsVisualInertialMeasViaBspline(modelFile, targetFile)
     print "Finished generating sample test"   
     print
 

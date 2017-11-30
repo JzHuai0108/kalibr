@@ -240,7 +240,8 @@ def saveBspline(cself, filename="bspline.txt"):
     np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
     return modelFile
 
-def loadBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml"):
+def simulateRsVisualInertialMeasViaBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml"):
+    '''simulate visual(rolling shutter) inertial measurements with a predefined BSpline model representing a realistic motion'''
     poseSplineDv2 = loadBsplineModel(filename)   
     refTimeFile = filename.replace("knotCoeffT", "ref_camera_time", 1)
     camTimes = np.loadtxt(refTimeFile)
@@ -261,7 +262,7 @@ def loadBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml"):
     refPoseStream2.close()
 
     # simulate some camera observations
-    #TODO: generalize the following by referencing 
+    #TODO: configure the target per user request by referring to the below line 
     #grid = setupCalibrationTarget(self, targetConfig, showExtraction=False, showReproj=False, imageStepping=False):
     
     #load calibration target configuration     
@@ -355,7 +356,7 @@ def loadBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml"):
                 break          
             
         print 
-    	imageCornerProjected2.append(lastImagePoint)      
+    	imageCornerProjected2.append(imagePoint0)      
 
     imageCornerProjectedArray2 = np.array(imageCornerProjected2)
 
