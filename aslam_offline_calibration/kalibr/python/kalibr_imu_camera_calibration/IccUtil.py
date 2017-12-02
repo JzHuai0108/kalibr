@@ -219,10 +219,17 @@ def saveBspline(cself, filename="bspline.txt"):
                       and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
 
     refPoseStream = open(filename.replace("bspline", "ref_pose",1), 'w')
-    print >> refPoseStream, "%B spline poses: time, T_w_b(txyz, qxyzw) estimated by Kalibr calibrator"  
+    print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"  
     saveBsplineRefPose(imuTimes, poseSplineDv, stream=refPoseStream)
     refPoseStream.close()
-    refTimeFile = filename.replace("bspline", "ref_camera_time",1)
+    
+    refStateFile = filename.replace("bspline", "ref_state",1)
+    refStateStream = open(refStateFile, 'w')
+    print >> sys.stdout, "  Saving system states at camera rate generated from B-spline to", refStateFile   
+    saveBsplineRefStates(camTimes, poseSplineDv, cself, refStateStream)
+    refStateStream.close()
+
+    refTimeFile = filename.replace("bspline", "ref_camera_time",1)    
     np.savetxt(refTimeFile, camTimes.T, fmt='%.9f')
 
     refImuFile = filename.replace("bspline", "ref_imu_meas",1)
@@ -240,27 +247,21 @@ def saveBspline(cself, filename="bspline.txt"):
     np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
     return modelFile
 
-def simulateRsVisualInertialMeasViaBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml"):
+def simulateRsVisualInertialMeasViaBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml", \
+    chainYaml='camchain.yaml', time_offset=0.0, time_readout=30e-3):
     '''simulate visual(rolling shutter) inertial measurements with a predefined BSpline model representing a realistic motion'''
     poseSplineDv2 = loadBsplineModel(filename)   
     refTimeFile = filename.replace("knotCoeffT", "ref_camera_time", 1)
     camTimes = np.loadtxt(refTimeFile)
-    print >> sys.stdout, "sampling starting time ", '%.9f' % camTimes[0]
-    refPoseFile = filename.replace("knotCoeffT", "ref_posex", 1)
-    refPoseStream2 = open(refPoseFile, 'w')
-    print >> sys.stdout, "got a transformation sample ", poseSplineDv2.spline().transformation(poseSplineDv2.spline().t_min() + 1.0)
+    print >> sys.stdout, "  Camera frame sampling start time %.9f and finish time %.9f" % (camTimes[0], camTimes[-1])
+   
     
-    chainYaml = filename.replace("knotCoeffT", "camchain", 1)
-    chainYaml = chainYaml.replace(".txt", ".yaml", 1)
-    print "Reading camera chain:", chainYaml
+    print "  Reading camera chain:", chainYaml
     chain = kc.CameraChainParameters(chainYaml)  
     chain.printDetails()
     camNr=0
     T_c0_imu = chain.getExtrinsicsImuToCam(camNr)  
-    print >> refPoseStream2, "%B spline poses: time, T_w_c(txyz, qxyzw) estimated by Kalibr calibrator"  
-    saveBsplineRefPose(camTimes.T, poseSplineDv2, stream=refPoseStream2, T_b_c=T_c0_imu.inverse())
-    refPoseStream2.close()
-
+   
     # simulate some camera observations
     #TODO: configure the target per user request by referring to the below line 
     #grid = setupCalibrationTarget(self, targetConfig, showExtraction=False, showReproj=False, imageStepping=False):
@@ -279,24 +280,23 @@ def simulateRsVisualInertialMeasViaBspline(filename="knotCoeffT.txt", targetYaml
                                                             targetParams['tagSize'], 
                                                             targetParams['tagSpacing'], 
                                                             options)
-    simulatedObs = acv.GridCalibrationTargetObservation(grid) #this line should work though 
+    simulatedObs = acv.GridCalibrationTargetObservation(grid) #this line should work although 
     # in the constructor GridCalibrationTargetObservation(GridCalibrationTarget::Ptr) is
     # inconsistent with GridCalibrationTargetBase::Ptr
     
     camConfig = chain.getCameraParameters(camNr)
-    camera = kc.AslamCamera.fromParameters( camConfig)
-
-    # get the GS camera observations
+    camera = kc.AslamCamera.fromParameters( camConfig)    
+    
+    #for james in range(0, camTimes.shape[0])
     sm_T_w_c= getCameraPoseAt(camTimes[0], poseSplineDv2, T_b_c=T_c0_imu.inverse())
     print >> sys.stdout, '%.9f' % camTimes[0], ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str,sm_T_w_c.q()))
     simulatedObs.set_T_t_c(sm_T_w_c)
-    v2Point = np.array([[0],[0]])
     
     print "total corners ", simulatedObs.getTotalTargetPoint()
-    print "image rows ", simulatedObs.imRows()
-    
-    lineDelay = 20e-3/480
-    
+    print "image rows ", simulatedObs.imRows(), simulatedObs.imCols()    
+    lineDelay = time_readout/480
+    print "line delay ", lineDelay
+
     print "Naive method"
     # this method is not proved to converge, but performs as good as Newton's method empirically
     imageCornerProjected= list()
@@ -319,7 +319,7 @@ def simulateRsVisualInertialMeasViaBspline(filename="knotCoeffT.txt", targetYaml
                 break
         print 
     	imageCornerProjected.append(lastImagePoint) 
-
+    imageCornerProjectedArray = np.array(imageCornerProjected)
     print
     
     print "Newton method"
@@ -360,7 +360,7 @@ def simulateRsVisualInertialMeasViaBspline(filename="knotCoeffT.txt", targetYaml
 
     imageCornerProjectedArray2 = np.array(imageCornerProjected2)
 
-    imageCornerProjectedArray = np.array(imageCornerProjected)
+    
     reproducedImageCornerFile = filename.replace("knotCoeffT", "regenerated_corners", 1)
     print "reproducedImageCorner shape ", imageCornerProjectedArray.shape
     np.savetxt(reproducedImageCornerFile, np.concatenate((imageCornerProjectedArray[:,:,0], imageCornerProjectedArray2[:,:,0]),axis=1), fmt=['%.9f', '%.9f', '%d', '%.9f', '%.9f', '%d'])
@@ -379,6 +379,46 @@ def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transfor
         sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c     
         print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str,sm_T_w_c.q()))
       
+def saveBsplineRefStates(times, poseSplineDv, cself, stream=sys.stdout, T_b_c=sm.Transformation()):
+    '''save the system states at the camera reference times in a customized format. system states are (T_w_b(txyz, qxyzw), v_w, bg, ba)'''
+    
+    stream.write('%Each line contains the state at a frame\'s reference time: all in metric units unless specified otherwise\n')
+    stream.write('%frame id, frame id in source, timestamp, T_WB[xyz, qxyzw], v_W, bg, ba, isKeyFrame[0 or 1]\n')
+
+    idx = 0
+    imu = cself.ImuList[idx]    
+   
+    gyroBias = imu.gyroBiasDv.spline()   
+    accBias = imu.accelBiasDv.spline()
+
+    print '\t\t\tstart time\t\tfinish time'
+    print 'poseSpline\t%.9f\t%.9f' % (poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max())
+    print 'gyroBias\t%.9f\t%.9f' % (gyroBias.t_min(), gyroBias.t_max())
+    print 'accBias\t\t%.9f\t%.9f' % (accBias.t_min(), accBias.t_max())
+    print 'imu.timeOffset\t%.9f' % imu.timeOffset
+        
+    timeOffsetPadding = 0.0
+    frameId = 0  
+    for timeScalar in times:    
+        dv = aopt.Scalar(timeScalar)
+        timeExpression = dv.toExpression()        
+        if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max() or \
+           timeScalar <= gyroBias.t_min() or timeScalar >= gyroBias.t_max() or \
+           timeScalar <= accBias.t_min() or timeScalar >= accBias.t_max():
+            print "Warn: time out of range in generating ref states"
+            continue
+        T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
+        sm_T_w_b = sm.Transformation(T_w_b.toTransformationMatrix())
+        v_w = poseSplineDv.linearVelocity(timeScalar).toEuclidean()
+        
+        gyro_bias = gyroBias.evalD(timeScalar,0)   
+        acc_bias = accBias.evalD(timeScalar,0)
+        
+        print >> stream, frameId, frameId, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_b.t())), \
+        ' '.join(map(str,sm_T_w_b.q())), ' '.join(map(str,v_w)), \
+        ' '.join(map(str, gyro_bias)), ' '.join(map(str, acc_bias)), 1
+        frameId += 1
+
 def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c=sm.Transformation()):
     timeOffsetPadding = 0.0  
       
@@ -394,29 +434,39 @@ def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c=sm.Transformation()):
     return sm_T_w_c
 
 def saveBsplineRefImuMeas(cself, filename):
-    print >> sys.stdout, "saving Bspline IMU measurements time (axyz, wxyz in metric units) estimated by Kalibr calibrator"
-    print >> sys.stdout, "to ", filename
+    print >> sys.stdout, "  Saving IMU measurements generated from B-spline (time wxyz, axyz bg, ba in metric units) to", filename
 
     idx = 0
     imu = cself.ImuList[idx]    
     poseSplineDv = cself.poseDv
-    times = np.array([[im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
+    times = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
                       if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
-                      and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ]])
+                      and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
 
     predictedAng_body =  np.array([err.getPredictedMeasurement() for err in imu.gyroErrors])    
     predicetedAccel_body =  np.array([err.getPredictedMeasurement() for err in imu.accelErrors])
-    print >> sys.stdout, "times ", times.shape
-    print >> sys.stdout, "ang ", predictedAng_body.shape
-    print >> sys.stdout, "accel ", predicetedAccel_body.shape    
-    whole=np.concatenate((times.T, predicetedAccel_body, predictedAng_body),axis=1)
-    np.savetxt(filename,whole, fmt=['%.9f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
+
+    gyroBias = imu.gyroBiasDv.spline()    
+    gyro_bias_spline = np.array([gyroBias.evalD(t,0) for t in times])
+    
+    accBias = imu.accelBiasDv.spline()    
+    acc_bias_spline = np.array([accBias.evalD(t,0) for t in times])
+
+    print >> sys.stdout, 'Epitome of predicted inertial measurements'
+    print >> sys.stdout, "\t#times", times.shape
+    print >> sys.stdout, "\t#gyro", predictedAng_body.shape
+    print >> sys.stdout, "\t#accel", predicetedAccel_body.shape
+    print >> sys.stdout, "\t#gyro bias", gyro_bias_spline.shape
+    print >> sys.stdout, "\t#accel bias", acc_bias_spline.shape
+    
+    whole=np.concatenate((np.array([times]).T, predicetedAccel_body, predictedAng_body, gyro_bias_spline, acc_bias_spline),axis=1)
+    np.savetxt(filename,whole, fmt=['%.9f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f'])
 
 def saveBsplineModel(cself, filename):    
     poseSpline = cself.poseDv.spline()    
-    print >> sys.stdout,"splineOrder", poseSpline.splineOrder(), "should be 6"    
+    print >> sys.stdout,"  splineOrder", poseSpline.splineOrder(), "should be 6"    
     poseSpline.savePoseSplineToFile(filename)   
-    print >> sys.stdout, "saved B spline model to ", filename
+    print >> sys.stdout, "  saved B spline model to ", filename
 
 def loadBsplineModel(knotCoeffFile):
     splineOrder = 6

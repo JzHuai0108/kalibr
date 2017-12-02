@@ -419,8 +419,8 @@ class IccCamera():
         #T_cN_b: from imu to camera N coords
         T_c_w = T_cN_b  * T_b_w
         
-        print "T_c_w ", sm.Transformation(T_c_w.toTransformationMatrix()).T(), " and time ", '%.9f' % frameTimeScalar
-        print "T_w_c ", sm.Transformation(T_c_w.toTransformationMatrix()).inverse().T(), " and time ", '%.9f' % frameTimeScalar
+        print "T_c_w\n", sm.Transformation(T_c_w.toTransformationMatrix()).T(), '\nand time %.9f' % frameTimeScalar
+        print "T_w_c\n", sm.Transformation(T_c_w.toTransformationMatrix()).inverse().T(), '\nand time %.9f' % frameTimeScalar
         targetCornerPoints = np.array( obs.getCornersTargetFrame() ).T #2xN
         #setup an aslam frame (handles the distortion)
         frame = self.camera.frameType()

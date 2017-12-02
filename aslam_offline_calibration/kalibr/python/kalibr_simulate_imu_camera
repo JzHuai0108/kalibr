@@ -66,7 +66,7 @@ def parseArgs():
         
     #configuration files
     groupCam = parser.add_argument_group('Camera system configuration')
-    groupCam.add_argument('--cams', dest='chain_yaml', help='Camera system configuration as yaml file', action=Once)
+    groupCam.add_argument('--cams', dest='chain_yaml', help='Camera system configuration as yaml file', required=True, action=Once)
     groupCam.add_argument('--recompute-camera-chain-extrinsics',  action='store_true', dest='recompute_chain_extrinsics', \
                           help='Recompute the camera chain extrinsics. This option is exclusively recommended for debugging purposes in order to identify problems with the camera chain extrinsics.')
     groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma', help='Standard deviation of the distribution of reprojected corner points [px]. (default: %(default)s)', required=False)
@@ -84,11 +84,10 @@ def parseArgs():
     groupSim = parser.add_argument_group('Simulation options')
     groupCam.add_argument('--model-file', dest='model_txt', help='The B spline knot coefficients of the sample motion as a txt file, e.g., knotCoeffT.txt', required=True, action=Once)
     groupSim.add_argument('--time-offset', type=float, default=0.0, dest='time_offset', help='Time offset between camera and inertial measurements, raw timestamp of frame i + time offset = time of frame i in imu clock [s] (default: %(default)s)', required=False)
-    groupSim.add_argument('--time-readout', type=float, default=0.0, dest='time_readout', help='Read out time of a full frame [s] (default: %(default)s)', required=False)
-    groupSim.add_argument('--camera-frame-rate', type=int, default=30, dest='camera_frame_rate', help='Frame rate of the camera [1] (default: %(default)s)', required=False)
-    groupSim.add_argument('--imu-frame-rate', type=int, default=100, dest='imu_frame_rate', help='Frame rate of the IMU [1] (default: %(default)s)', required=False)
+    groupSim.add_argument('--time-readout', type=float, default=30e-3, dest='time_readout', help='Read out time of a full frame [s] (default: %(default)s)', required=False)
+    groupSim.add_argument('--frame-rate', type=int, default=30, dest='camera_frame_rate', help='Frame rate of the camera [1] (default: %(default)s)', required=False)
     
-    #Result options  
+    #Result options
     outputSettings = parser.add_argument_group('Output options')    
     outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Verbose output (disables plots)')
     outputSettings.add_argument('--dont-show-report', action='store_true', dest='dontShowReport', help='Do not show the report on screen after calibration.')    
@@ -116,9 +115,10 @@ def main():
     parsed = parseArgs();
     modelFile = parsed.model_txt
     targetFile = parsed.target_yaml
-    
+    camChainYaml = parsed.chain_yaml
+
     print "Test loading the model and generate sample data "    
-    util.simulateRsVisualInertialMeasViaBspline(modelFile, targetFile)
+    util.simulateRsVisualInertialMeasViaBspline(modelFile, targetFile, camChainYaml, parsed.time_offset, parsed.time_readout)
     print "Finished generating sample test"   
     print
 

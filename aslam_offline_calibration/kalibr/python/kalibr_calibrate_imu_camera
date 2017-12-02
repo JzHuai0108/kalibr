@@ -237,11 +237,10 @@ def main():
     util.saveResultTxt(iCal, filename=resultFileTxt)
     print "  Detailed results written to file: {0}".format(resultFileTxt)
 
-    print "Saving B spline trajectory..."
     trajFilenameStub = stub + "/bspline-imucam-" + bagtag + ".txt"
     modelFile = util.saveBspline(iCal, filename=trajFilenameStub)
     
-    print "Generating result report..."    
+    print "  Generating result report..."    
     reportFile = stub + "/report-imucam-" + bagtag + ".pdf"
     util.generateReport(iCal, filename=reportFile, showOnScreen=not parsed.dontShowReport)
     print "  Report written to {0}".format(reportFile)

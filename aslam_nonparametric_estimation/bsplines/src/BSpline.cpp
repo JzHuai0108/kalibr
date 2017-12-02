@@ -1769,8 +1769,8 @@ Eigen::MatrixXd BSpline::segmentIntegral(int segmentIdx, const Eigen::MatrixXd &
     void BSpline::saveSplineToFile(std::string knotCoeffFile)
     {
       std::ofstream kcs(knotCoeffFile);
-      kcs<<"%%splineOrder knots length coefficients rows cols "<<std::endl;
-      kcs<<"%%sthen knots, then coefficients.transpose"<<std::endl;
+      kcs<<"%%splineOrder, knots length, coefficients rows, cols"<<std::endl;
+      kcs<<"%%then knots, then coefficients.transpose"<<std::endl;
       kcs<< splineOrder_ <<" "<< knots_.size()<<" "<< coefficients_.rows() <<" "<< coefficients_.cols()<<std::endl;
       kcs<< std::fixed << std::setprecision(9);
       for(size_t jack=0; jack<knots_.size(); ++jack)
