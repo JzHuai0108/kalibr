@@ -239,13 +239,14 @@ def saveBspline(cself, filename="bspline.txt"):
     modelFile = filename.replace("bspline", "knotCoeffT",1) 
     saveBsplineModel(cself, modelFile)
     
-    camNr = 0
-    imageCornerPoints = cself.CameraChain.getCornersImageSample(poseSplineDv, 0.0).T
-    targetCornerPoints = cself.CameraChain.getCornersTargetSample(camNr).T
-    sampleImageCorners = filename.replace("bspline", "sampleImageCorners",1)
-    sampleTargetCorners = filename.replace("bspline", "sampleTargetCorners",1)
-    np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
-    np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
+    if 0:
+        camNr = 0
+        imageCornerPoints = cself.CameraChain.getCornersImageSample(poseSplineDv, 0.0).T
+        targetCornerPoints = cself.CameraChain.getCornersTargetSample(camNr).T
+        sampleImageCorners = filename.replace("bspline", "sampleImageCorners",1)
+        sampleTargetCorners = filename.replace("bspline", "sampleTargetCorners",1)
+        np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
+        np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
     return modelFile
 
 class RsVisualInertialMeasViaBsplineSimulator(object):
@@ -383,7 +384,9 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
             print 'Naive method for state time %.9f' % state_time
         for iota in range(self.simulatedObs.getTotalTargetPoint()):
             # get the initial observation
-            sm_T_w_c= getCameraPoseAt(state_time, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+            sm_T_w_c, isValid = getCameraPoseAt(state_time, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+            if not isValid:
+                continue
             lastImagePoint = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) #3x1, generated with the GS model
             if lastImagePoint[2, 0] == 0.0:
                 continue
@@ -394,9 +397,9 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
                 print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T           
             while numIter < 8:
                 currTime = (lastImagePoint[1, 0] - self.imageHeight/2)*line_delay + state_time            
-                sm_T_w_cx= getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+                sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
                 imagePoint = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
-                if imagePoint[2, 0] == 0.0:
+                if not isValid or imagePoint[2, 0] == 0.0:
                     aborted = True
                     break
                 delta = np.absolute(lastImagePoint[1,0] - imagePoint[1,0])            
@@ -423,9 +426,9 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
             return np.array([[[]]]), frameKeypoints
        
         for iota in range(self.simulatedObs.getTotalTargetPoint()): 
-            sm_T_w_c= getCameraPoseAt(state_time, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)       
+            sm_T_w_c, isValid = getCameraPoseAt(state_time, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)       
             lastImagePoint = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) #3x1, this is GS camera model
-            if lastImagePoint[2, 0] == 0.0:
+            if not isValid or lastImagePoint[2, 0] == 0.0:
                 continue
             numIter = 0
             aborted = False
@@ -437,18 +440,18 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
 
                 # compute g(y_0)
                 currTime = (lastImagePoint[1, 0] - self.imageHeight/2)*line_delay + state_time + time_offset
-                sm_T_w_cx= getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+                sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
                 imagePoint0 = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
-                if imagePoint0[2, 0] == 0.0:
+                if not isValid or imagePoint0[2, 0] == 0.0:
                     aborted = True
                     break
                    
                 # compute Jacobian of g(y) relative to y at y_0
                 eps = 1
                 currTime = (lastImagePoint[1, 0] + eps - self.imageHeight/2)*line_delay + state_time + time_offset
-                sm_T_w_cx= getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+                sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
                 imagePoint1 = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
-                if imagePoint1[2, 0] == 0.0:
+                if not isValid or imagePoint1[2, 0] == 0.0:
                     aborted = True
                     break
                 jacob = (imagePoint1[1, 0] - imagePoint0[1, 0])/eps
@@ -537,11 +540,11 @@ def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c=sm.Transformation()):
         
     if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
         print "Warn: %.9f time out of range [%.9f, %.9f]" % (timeScalar, poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max())
-        return sm.Transformation()
+        return sm.Transformation(), False
        
     T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
     sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c  
-    return sm_T_w_c
+    return sm_T_w_c, True
 
 def saveBsplineRefImuMeas(cself, filename):
     print >> sys.stdout, "  Saving IMU measurements generated from B-spline (time wxyz, axyz bg, ba in metric units) to", filename
