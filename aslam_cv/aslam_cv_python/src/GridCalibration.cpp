@@ -131,12 +131,31 @@ boost::python::tuple imageGridPoint(
   return boost::python::make_tuple(success, p);
 }
 
-/// \brief get all corners in target coordinates (order matches getCornersImageFrame)
+/// \brief get all (observed) corners in target coordinates (order matches getCornersImageFrame)
 Eigen::MatrixXd getCornersTargetFrame(
     aslam::cameras::GridCalibrationTargetObservation * frame) {
   // Get the corners in the target frame
   std::vector<cv::Point3f> targetCorners;
   unsigned int numCorners = frame->getCornersTargetFrame(targetCorners);
+
+  // Convert all target corners to eigen
+  Eigen::MatrixXd targetCornersEigen = Eigen::MatrixXd::Zero(numCorners, 3);
+
+  for (unsigned int i = 0; i < numCorners; i++) {
+    targetCornersEigen(i, 0) = targetCorners[i].x;
+    targetCornersEigen(i, 1) = targetCorners[i].y;
+    targetCornersEigen(i, 2) = targetCorners[i].z;
+  }
+
+  return targetCornersEigen;
+}
+
+/// \brief get all corners in target coordinates
+Eigen::MatrixXd getAllCornersTargetFrame(
+    aslam::cameras::GridCalibrationTargetObservation * frame) {
+  // Get the corners in the target frame
+  std::vector<cv::Point3f> targetCorners;
+  unsigned int numCorners = frame->getAllCornersTargetFrame(targetCorners);
 
   // Convert all target corners to eigen
   Eigen::MatrixXd targetCornersEigen = Eigen::MatrixXd::Zero(numCorners, 3);
@@ -321,6 +340,7 @@ void exportGridCalibration() {
     .def("getCornersIdx", &getCornersIdx)
     .def("getCornerReprojection", &getCornerReprojection)
     .def("projectATargetPoint", &projectATargetPoint)
+    .def("getAllCornersTargetFrame", &getAllCornersTargetFrame)
     .def("getImage", &getImage)
     .def("setImage", &setImage)
     .def("clearImage", &GridCalibrationTargetObservation::clearImage)

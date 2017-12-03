@@ -18,6 +18,7 @@ import time
 from matplotlib.backends.backend_pdf import PdfPages
 import StringIO
 import matplotlib.patches as patches
+from random import gauss # simulate reprojection errors
 
 def printErrorStatistics(cself, dest=sys.stdout):
     # Reprojection errors
@@ -212,7 +213,7 @@ def saveBspline(cself, filename="bspline.txt"):
         frameTime = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toExpression() + obs.time().toSec() + cself.CameraChain.camList[0].timeshiftCamToImuPrior
         frameTimeScalar = frameTime.toScalar()
         timeList.append(frameTimeScalar)
-    camTimes = np.array(timeList)
+    refStateTimes = np.array(timeList)
 
     imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
                       if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
@@ -226,11 +227,11 @@ def saveBspline(cself, filename="bspline.txt"):
     refStateFile = filename.replace("bspline", "ref_state",1)
     refStateStream = open(refStateFile, 'w')
     print >> sys.stdout, "  Saving system states at camera rate generated from B-spline to", refStateFile   
-    saveBsplineRefStates(camTimes, poseSplineDv, cself, refStateStream)
+    saveBsplineRefStates(refStateTimes, poseSplineDv, cself, refStateStream)
     refStateStream.close()
 
     refTimeFile = filename.replace("bspline", "ref_camera_time",1)    
-    np.savetxt(refTimeFile, camTimes.T, fmt='%.9f')
+    np.savetxt(refTimeFile, refStateTimes.T, fmt='%.9f')
 
     refImuFile = filename.replace("bspline", "ref_imu_meas",1)
     saveBsplineRefImuMeas(cself, refImuFile) 
@@ -247,123 +248,232 @@ def saveBspline(cself, filename="bspline.txt"):
     np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
     return modelFile
 
-def simulateRsVisualInertialMeasViaBspline(filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml", \
-    chainYaml='camchain.yaml', time_offset=0.0, time_readout=30e-3):
+class RsVisualInertialMeasViaBsplineSimulator(object):
     '''simulate visual(rolling shutter) inertial measurements with a predefined BSpline model representing a realistic motion'''
-    poseSplineDv2 = loadBsplineModel(filename)   
-    refTimeFile = filename.replace("knotCoeffT", "ref_camera_time", 1)
-    camTimes = np.loadtxt(refTimeFile)
-    print >> sys.stdout, "  Camera frame sampling start time %.9f and finish time %.9f" % (camTimes[0], camTimes[-1])
+    def __init__(self, filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml", \
+      chainYaml='camchain.yaml', time_readout=30e-3):
+        self.modelFilename = filename
+        self.simulPoseSplineDv = loadBsplineModel(filename)        
+        refTimeFile = filename.replace("knotCoeffT", "ref_camera_time", 1)
+        self.refStateTimes = np.loadtxt(refTimeFile)
+        print >> sys.stdout, "  Camera frame sampling start time %.9f and finish time %.9f" % (self.refStateTimes[0], self.refStateTimes[-1])
    
+        print "  Reading camera chain:", chainYaml
+        chain = kc.CameraChainParameters(chainYaml)        
+        camNr=0
+        self.T_c0_imu = chain.getExtrinsicsImuToCam(camNr)  
+        self.T_imu_c0 = self.T_c0_imu.inverse()
+        camConfig = chain.getCameraParameters(camNr)
+        camConfig.printDetails()
+        resolution = camConfig.getResolution()
+        print '  Camera resolution', resolution
+        camera = kc.AslamCamera.fromParameters( camConfig)    
+        self.camGeometry = camera.geometry
+
+        targetConfig = kc.CalibrationTargetParameters(targetYaml)
+        print "which target is used in the simulation?"
+        targetConfig.printDetails()
+        self.setupCalibrationTarget(targetConfig, showExtraction=False, showReproj=False, imageStepping=False)
+        self.imageHeight = resolution[1]   
+        self.lineDelay = time_readout/self.imageHeight
+        print "line delay ", self.lineDelay
+        self.landmark2ObservationList = dict()
+        for iota in range(self.simulatedObs.getTotalTargetPoint()):
+            self.landmark2ObservationList[iota]=list()
+
+    def setupCalibrationTarget(self, targetConfig, showExtraction=False, showReproj=False, imageStepping=False):
+        '''copied from IccCamera class'''
+        #load the calibration target configuration
+        targetParams = targetConfig.getTargetParams()
+        targetType = targetConfig.getTargetType()
     
-    print "  Reading camera chain:", chainYaml
-    chain = kc.CameraChainParameters(chainYaml)  
-    chain.printDetails()
-    camNr=0
-    T_c0_imu = chain.getExtrinsicsImuToCam(camNr)  
-   
-    # simulate some camera observations
-    #TODO: configure the target per user request by referring to the below line 
-    #grid = setupCalibrationTarget(self, targetConfig, showExtraction=False, showReproj=False, imageStepping=False):
-    
-    #load calibration target configuration     
-    targetConfig = kc.CalibrationTargetParameters(targetYaml)
-    targetParams = targetConfig.getTargetParams()
-    print "Initializing calibration target:"
-    targetConfig.printDetails()
-    options = acv_april.AprilgridOptions()
-    options.showExtractionVideo = False
-    options.minTagsForValidObs = int( np.max( [targetParams['tagRows'], targetParams['tagCols']] ) + 1 )
+        if targetType == 'checkerboard':
+            options = acv.CheckerboardOptions() 
+            options.filterQuads = True
+            options.normalizeImage = True
+            options.useAdaptiveThreshold = True        
+            options.performFastCheck = False
+            options.windowWidth = 5
+            options.showExtractionVideo = showExtraction
+            grid = acv.GridCalibrationTargetCheckerboard(targetParams['targetRows'], 
+                                                            targetParams['targetCols'], 
+                                                            targetParams['rowSpacingMeters'], 
+                                                            targetParams['colSpacingMeters'],
+                                                            options)
+        elif targetType == 'circlegrid':
+            options = acv.CirclegridOptions()
+            options.showExtractionVideo = showExtraction
+            options.useAsymmetricCirclegrid = targetParams['asymmetricGrid']
+            grid = acv.GridCalibrationTargetCirclegrid(targetParams['targetRows'],
+                                                          targetParams['targetCols'], 
+                                                          targetParams['spacingMeters'], 
+                                                          options)
+        elif targetType == 'aprilgrid':
+            options = acv_april.AprilgridOptions() 
+            options.showExtractionVideo = showExtraction
+            options.minTagsForValidObs = int( np.max( [targetParams['tagRows'], targetParams['tagCols']] ) + 1 )
             
-    grid = acv_april.GridCalibrationTargetAprilgrid(targetParams['tagRows'],
+            grid = acv_april.GridCalibrationTargetAprilgrid(targetParams['tagRows'],
                                                             targetParams['tagCols'], 
                                                             targetParams['tagSize'], 
                                                             targetParams['tagSpacing'], 
                                                             options)
-    simulatedObs = acv.GridCalibrationTargetObservation(grid) #this line should work although 
-    # in the constructor GridCalibrationTargetObservation(GridCalibrationTarget::Ptr) is
-    # inconsistent with GridCalibrationTargetBase::Ptr
+        else:
+            raise RuntimeError( "Unknown calibration target." )
+                          
+        options = acv.GridDetectorOptions() 
+        options.imageStepping = imageStepping
+        options.plotCornerReprojection = showReproj
+        options.filterCornerOutliers = True
+        
+        self.simulatedObs = acv.GridCalibrationTargetObservation(grid) #this line should work although 
+        # in the constructor GridCalibrationTargetObservation(GridCalibrationTarget::Ptr) is
+        # inconsistent with GridCalibrationTargetBase::Ptr
+        self.allTargetCorners = np.array(self.simulatedObs.getAllCornersTargetFrame()) # nx3
+        print "all target corners shape", self.allTargetCorners.shape   
+        
+        assert self.allTargetCorners.shape[0] == self.simulatedObs.getTotalTargetPoint()
+   
     
-    camConfig = chain.getCameraParameters(camNr)
-    camera = kc.AslamCamera.fromParameters( camConfig)    
-    
-    #for james in range(0, camTimes.shape[0])
-    sm_T_w_c= getCameraPoseAt(camTimes[0], poseSplineDv2, T_b_c=T_c0_imu.inverse())
-    print >> sys.stdout, '%.9f' % camTimes[0], ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str,sm_T_w_c.q()))
-    simulatedObs.set_T_t_c(sm_T_w_c)
-    
-    print "total corners ", simulatedObs.getTotalTargetPoint()
-    print "image rows ", simulatedObs.imRows(), simulatedObs.imCols()    
-    lineDelay = time_readout/480
-    print "line delay ", lineDelay
+    def simulateOneFrame(self):
+        for frameId in range(1):
+             state_time = self.refStateTimes[0]
+             line_delay = self.lineDelay             
+             imageCornerProjectedArray = self.naiveMethodToRsProjection(state_time, line_delay, True)
+             imageCornerProjectedArray2, unusedDesc = self.newtonMethodToRsProjection(state_time, line_delay, 1.0, 0.0, True)
 
-    print "Naive method"
-    # this method is not proved to converge, but performs as good as Newton's method empirically
-    imageCornerProjected= list()
-    for iota in range(0, simulatedObs.getTotalTargetPoint(), 1):
-        # get the initial observation  
-        lastImagePoint = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_c, iota) #3x1, this is GS camera model
-        print "image point ", lastImagePoint.T 
-        numIter = 0       
-        while numIter < 5:
-            currTime = lastImagePoint[1, 0]*lineDelay + camTimes[0]
-            
-            sm_T_w_cx= getCameraPoseAt(currTime, poseSplineDv2, T_b_c=T_c0_imu.inverse())
-            imagePoint = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_cx, iota)
-            print "image point ", imagePoint.T
-            delta = np.absolute(lastImagePoint[1,0] - imagePoint[1,0])
-            
-            numIter += 1
-            lastImagePoint = imagePoint
-            if(delta < 1e-3):
-                break
-        print 
-    	imageCornerProjected.append(lastImagePoint) 
-    imageCornerProjectedArray = np.array(imageCornerProjected)
-    print
+        reproducedImageCornerFile = self.modelFilename.replace("knotCoeffT", "sampleImageCornersByNaiveAndNewton", 1)
+        print "  ReproducedImageCorner shape ", imageCornerProjectedArray.shape, ' should be (144, 3, 1)'
+        np.savetxt(reproducedImageCornerFile, np.concatenate((imageCornerProjectedArray[:,:,0], imageCornerProjectedArray2[:,:,0]), axis=1), fmt=['%.9f', '%.9f', '%d', '%.9f', '%.9f', '%d'])
+
+    def simulate(self, landmarkOutputFilename, reprojectionSigma, time_offset=0.0):
+        '''simulate camera observations for frames at all ref state times and plus noise''' 
+        print 'Reprojection Gaussian noise sigma %.5f' % reprojectionSigma
+        print 'Image time advance relative to Imu clock', time_offset
+             
+        for frameId in range(0, self.refStateTimes.shape[0], 2):
+             state_time = self.refStateTimes[frameId]
+             line_delay = self.lineDelay
+             unusedCornerProjections, frameKeypoints = self.newtonMethodToRsProjection(state_time, line_delay, reprojectionSigma, time_offset)
+             print '  Projected %4d' % len(frameKeypoints), 'target corners for state at %.9f' % state_time 
+             for lmObs in frameKeypoints: #each lmObs (lmId, keypoint Id, x, y, size)
+                 self.landmark2ObservationList[lmObs[0]].append((frameId, lmObs[1], lmObs[2], lmObs[3], lmObs[4]))
+        lmStream = open(landmarkOutputFilename, 'w')
+        lmStream.write('%each line contains a landmark: lm id, lm p_w(homogeneous xyzw), num obs, <frameid> <keypoint id, x, y, size>, ... , <frameid> <keypoint id, x, y, size>\r\n')
+        probe = 0
+        homogeneousW = 1.0
+        positionQuality = 1.0
+        for lm, obsList in sorted(self.landmark2ObservationList.iteritems()):
+            assert probe == lm            
+            lmStream.write('%d ' % lm + ' '.join(map(str, self.allTargetCorners[lm,:]))+ \
+              ' %.3f %.3f %d' % (homogeneousW, positionQuality, len(obsList)))
+            for observation in obsList:
+                lmStream.write(' '+' '.join(map(str, observation)))
+            lmStream.write('\r\n')
+            probe += 1
+        lmStream.close()
+        print '  Written landmark observations to', landmarkOutputFilename
+        print '  To use the simulated dataset, you need to pull out the gravity vector from report-...-dynamic.pdf and plug it into the customized bundle adjustment calibrator'
+        print
+
+    def naiveMethodToRsProjection(self, state_time, line_delay, verbose=False):   
+        '''this method is not proved theoretically to converge, but it performs as precise as Newton's method empirically, though slower'''
+        imageCornerProjected= list()
+        if verbose:
+            print 'Naive method for state time %.9f' % state_time
+        for iota in range(self.simulatedObs.getTotalTargetPoint()):
+            # get the initial observation
+            sm_T_w_c= getCameraPoseAt(state_time, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+            lastImagePoint = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) #3x1, generated with the GS model
+            if lastImagePoint[2, 0] == 0.0:
+                continue
+
+            numIter = 0  
+            aborted = False 
+            if verbose:  
+                print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T           
+            while numIter < 8:
+                currTime = (lastImagePoint[1, 0] - self.imageHeight/2)*line_delay + state_time            
+                sm_T_w_cx= getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+                imagePoint = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                if imagePoint[2, 0] == 0.0:
+                    aborted = True
+                    break
+                delta = np.absolute(lastImagePoint[1,0] - imagePoint[1,0])            
+                numIter += 1
+                if verbose:  
+                    print 'lmId', iota, 'iter', numIter, 'image coords', imagePoint.T                    
+                lastImagePoint = imagePoint
+                if delta < 1e-3:
+                    break
+            if verbose:
+                print
+            if not aborted:
+                imageCornerProjected.append(lastImagePoint)
+        return np.array(imageCornerProjected)
     
-    print "Newton method"
-    print
-    imageCornerProjected2 = list()
-    for iota in range(0, simulatedObs.getTotalTargetPoint(), 1):
-        # get the initial observation  
-        lastImagePoint = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_c, iota) #3x1, this is GS camera model
-        print "image point ", lastImagePoint.T 
-        numIter = 0       
-        # solve y=g(y) where y is the vertical projection in pixels
-        while numIter < 5:
-            # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
+    def newtonMethodToRsProjection(self, state_time, line_delay, reprojectionSigma = 1.0, time_offset=0.0, verbose = False):    
+        imageCornerProjected = list()
+        frameKeypoints = list()
+        kpId = 0
+        if verbose:
+            print 'Newton method for state time %.9f' % state_time
+        if state_time <= self.simulPoseSplineDv.spline().t_min() or state_time >= self.simulPoseSplineDv.spline().t_max():
+            print "Warn: %.9f time out of range [%.9f, %.9f] in newton method Rs simulation" % timeScalar, self.simulPoseSplineDv.spline().t_min(), self.simulPoseSplineDv.spline().t_max()
+            return np.array([[[]]]), frameKeypoints
+       
+        for iota in range(self.simulatedObs.getTotalTargetPoint()): 
+            sm_T_w_c= getCameraPoseAt(state_time, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)       
+            lastImagePoint = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) #3x1, this is GS camera model
+            if lastImagePoint[2, 0] == 0.0:
+                continue
+            numIter = 0
+            aborted = False
+            if verbose:  
+                print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T     
+            # solve y=g(y) where y is the vertical projection in pixels
+            while numIter < 8:
+                # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
 
-            # compute g(y_0)
-            currTime = lastImagePoint[1, 0]*lineDelay + camTimes[0]
-            sm_T_w_cx= getCameraPoseAt(currTime, poseSplineDv2, T_b_c=T_c0_imu.inverse())
-            imagePoint0 = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_cx, iota)
+                # compute g(y_0)
+                currTime = (lastImagePoint[1, 0] - self.imageHeight/2)*line_delay + state_time + time_offset
+                sm_T_w_cx= getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+                imagePoint0 = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                if imagePoint0[2, 0] == 0.0:
+                    aborted = True
+                    break
+                   
+                # compute Jacobian of g(y) relative to y at y_0
+                eps = 1
+                currTime = (lastImagePoint[1, 0] + eps - self.imageHeight/2)*line_delay + state_time + time_offset
+                sm_T_w_cx= getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
+                imagePoint1 = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                if imagePoint1[2, 0] == 0.0:
+                    aborted = True
+                    break
+                jacob = (imagePoint1[1, 0] - imagePoint0[1, 0])/eps
             
-            # compute Jacobian of g(y) relative to y at y_0
-            eps = 1
-            currTime = (lastImagePoint[1, 0] + eps)*lineDelay + camTimes[0]
-            sm_T_w_cx= getCameraPoseAt(currTime, poseSplineDv2, T_b_c=T_c0_imu.inverse())
-            imagePoint1 = simulatedObs.projectATargetPoint(camera.geometry, sm_T_w_cx, iota)
-            jacob = (imagePoint1[1, 0] - imagePoint0[1, 0])/eps
-            
-            # compute y_1
-            lastImagePoint[0, 0] = imagePoint0[0, 0]    
-            delta = imagePoint0[1, 0] - lastImagePoint[1, 0]        
-            lastImagePoint[1, 0] = lastImagePoint[1, 0] - (imagePoint0[1, 0] - lastImagePoint[1, 0])/(jacob - 1)
-            numIter += 1
-            print "image point ", imagePoint0.T
-            if(np.absolute(delta) < 1e-4):
-                break          
-            
-        print 
-    	imageCornerProjected2.append(imagePoint0)      
-
-    imageCornerProjectedArray2 = np.array(imageCornerProjected2)
-
+                # compute y_1
+                lastImagePoint[0, 0] = imagePoint0[0, 0]    
+                delta = imagePoint0[1, 0] - lastImagePoint[1, 0]        
+                lastImagePoint[1, 0] = lastImagePoint[1, 0] - (imagePoint0[1, 0] - lastImagePoint[1, 0])/(jacob - 1)
+                numIter += 1
+                if verbose:  
+                    print 'lmId', iota, 'iter', numIter, 'image coords', imagePoint0.T                    
+                if np.absolute(delta) < 1e-4:
+                    break
+            if verbose:
+                print
+            if not aborted:
+                #TODO: randomly mask some landmark observations
+                imageCornerProjected.append(imagePoint0)
+                xnoise = gauss(0.0, reprojectionSigma)
+                ynoise = gauss(0.0, reprojectionSigma)
+                frameKeypoints.append((iota, kpId, imagePoint0[0, 0] + xnoise, imagePoint0[1, 0] + ynoise, 12))
+                kpId += 1        
+        assert kpId == len(imageCornerProjected)
+        return np.array(imageCornerProjected), frameKeypoints
     
-    reproducedImageCornerFile = filename.replace("knotCoeffT", "regenerated_corners", 1)
-    print "reproducedImageCorner shape ", imageCornerProjectedArray.shape
-    np.savetxt(reproducedImageCornerFile, np.concatenate((imageCornerProjectedArray[:,:,0], imageCornerProjectedArray2[:,:,0]),axis=1), fmt=['%.9f', '%.9f', '%d', '%.9f', '%.9f', '%d'])
 
 def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
     
@@ -426,7 +536,7 @@ def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c=sm.Transformation()):
     timeExpression = dv.toExpression()
         
     if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
-        print >> sys.stdout, "Warn: time out of range "
+        print "Warn: %.9f time out of range [%.9f, %.9f]" % timeScalar, poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max()
         return sm.Transformation()
        
     T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)

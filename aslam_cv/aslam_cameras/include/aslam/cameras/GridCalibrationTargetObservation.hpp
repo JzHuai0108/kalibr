@@ -44,8 +44,11 @@ class GridCalibrationTargetObservation {
   /// \brief clear the image. This can be handy for saving memory.
   void clearImage();
 
-  /// \brief get all corners in image coordinates (order matches getCornersImageFrame)
+  /// \brief get all (observed) corners in image coordinates (order matches getCornersImageFrame)
   unsigned int getCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const;
+  
+  /// \brief get all corners in image coordinates
+  unsigned int getAllCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const;
 
   /// \brief get all corners in target frame coordinates (order matches getObservedTargetFrame)
   unsigned int getCornersImageFrame(std::vector<cv::Point2f> &outCornerList) const;

@@ -60,6 +60,28 @@ unsigned int GridCalibrationTargetObservation::getCornersTargetFrame(
   return cntCorners;
 }
 
+/// \brief get all (observed or not) corners in target frame coordinates
+unsigned int GridCalibrationTargetObservation::getAllCornersTargetFrame(
+    std::vector<cv::Point3f> &outCornerList) const {
+  SM_ASSERT_TRUE(Exception, _target.get() != NULL, "The target is not set");
+
+  //max. number of corner in the grid
+  unsigned int numCorners = _target->size();
+
+  // output the points
+  unsigned int cntCorners = 0;
+  outCornerList.clear();
+  for (unsigned int i = 0; i < numCorners; i++) {    
+    //convert to cv:Point2f and store
+    cv::Point3f corner(_target->point(i)[0], _target->point(i)[1], 0.0);
+    outCornerList.push_back(corner);
+
+    //count the observed corners
+    cntCorners += 1;    
+  }
+  return cntCorners;
+}
+
 /// \brief get all (observed) corners in target frame coordinates
 ///        returns the number of observed corners
 unsigned int GridCalibrationTargetObservation::getCornersImageFrame(

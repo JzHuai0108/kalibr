@@ -421,7 +421,7 @@ class IccCamera():
         
         print "T_c_w\n", sm.Transformation(T_c_w.toTransformationMatrix()).T(), '\nand time %.9f' % frameTimeScalar
         print "T_w_c\n", sm.Transformation(T_c_w.toTransformationMatrix()).inverse().T(), '\nand time %.9f' % frameTimeScalar
-        targetCornerPoints = np.array( obs.getCornersTargetFrame() ).T #2xN
+        targetCornerPoints = np.array( obs.getCornersTargetFrame() ).T #3xN
         #setup an aslam frame (handles the distortion)
         frame = self.camera.frameType()
         frame.setGeometry(self.camera.geometry)
