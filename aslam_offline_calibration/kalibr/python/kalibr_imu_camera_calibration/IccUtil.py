@@ -351,7 +351,7 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         print 'Reprojection Gaussian noise sigma %.5f' % reprojectionSigma
         print 'Image time advance relative to Imu clock', time_offset
              
-        for frameId in range(0, self.refStateTimes.shape[0], 2):
+        for frameId in range(0, self.refStateTimes.shape[0], 1):
              state_time = self.refStateTimes[frameId]
              line_delay = self.lineDelay
              unusedCornerProjections, frameKeypoints = self.newtonMethodToRsProjection(state_time, line_delay, reprojectionSigma, time_offset)
@@ -419,7 +419,7 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         if verbose:
             print 'Newton method for state time %.9f' % state_time
         if state_time <= self.simulPoseSplineDv.spline().t_min() or state_time >= self.simulPoseSplineDv.spline().t_max():
-            print "Warn: %.9f time out of range [%.9f, %.9f] in newton method Rs simulation" % timeScalar, self.simulPoseSplineDv.spline().t_min(), self.simulPoseSplineDv.spline().t_max()
+            print "Warn: %.9f time out of range [%.9f, %.9f] in newton method Rs simulation" % (state_time, self.simulPoseSplineDv.spline().t_min(), self.simulPoseSplineDv.spline().t_max())
             return np.array([[[]]]), frameKeypoints
        
         for iota in range(self.simulatedObs.getTotalTargetPoint()): 
@@ -536,7 +536,7 @@ def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c=sm.Transformation()):
     timeExpression = dv.toExpression()
         
     if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
-        print "Warn: %.9f time out of range [%.9f, %.9f]" % timeScalar, poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max()
+        print "Warn: %.9f time out of range [%.9f, %.9f]" % (timeScalar, poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max())
         return sm.Transformation()
        
     T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
