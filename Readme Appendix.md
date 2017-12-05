@@ -28,6 +28,23 @@ kalibr_calibrate_imu_camera --cam camchain.yaml --target april_6x6.yaml --imu im
 ## Simulate rolling shutter camera measurements
 ```
 kalibr_simulate_imu_camera "knotCoeffT.txt" april_6x6.yaml
+
 ```
 
+# Crash on design variables
+Design variable groups used in kalibr\_calibrate\_imu_camera
+```
+poseDv(spline)
+gravityDv(active)
+imu Dvs: gyroBiasDv(spline), accelBiasDv(spline), q_i_b_Dv(inactive), r_b_Dv(inactive), 
+potential imu Dvs for scaledMisalignment: q_gyro_i_Dv, M_accel_Dv, M_gyro_Dv, M_accel_gryo_Dv
+potential imu Dvs for size effect: rx_i_Dv, ry_i_Dv, rz_i_Dv, Ix_Dv, Iy_Dv, Iz_Dv
+camera Dvs: T_c_b_Dv, cameraTimetoImuTimeDv
+```
+
+```
+design variable     gravityDv      accelBiasDv/gyroBiasDv  q_i_b_Dv           r_b_Dv        poseSplineDv
+type                trivial        spline()                trivial            trivial       T_w_b=transformationAtTime(timeExpression, 0.0, 0.0)
+access its content  toEuclidean()  spline().evalD(t,0)     toRotationMatrix() toEuclidean() sm.Transformation(T_w_b.toTransformationMatrix())
+```
 
