@@ -119,10 +119,10 @@ def main():
     
     print "  Test loading the model and generate sample data "    
     simulator = util.RsVisualInertialMeasViaBsplineSimulator(modelFile, targetFile, camChainYaml,\
-       parsed.time_readout)
+       parsed.time_offset, parsed.time_readout)
     #simulator.simulateOneFrame()
     refLandmarkFile = modelFile.replace("knotCoeffT", "ref_landmarks", 1)
-    simulator.simulate(refLandmarkFile, parsed.reprojection_sigma, parsed.time_offset)    
+    simulator.simulate(refLandmarkFile, parsed.reprojection_sigma)    
 
 if __name__ == "__main__": 
     main()

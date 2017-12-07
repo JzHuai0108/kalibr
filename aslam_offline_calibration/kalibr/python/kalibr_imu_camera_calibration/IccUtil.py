@@ -207,18 +207,21 @@ def saveBspline(cself, filename="bspline.txt"):
     idx = 0
     imu = cself.ImuList[idx]    
     poseSplineDv = cself.poseDv
-    timeList = list()
-    for obs in cself.CameraChain.camList[0].targetObservations:
-        # Build a transformation expression for the time.
-        frameTime = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toExpression() + obs.time().toSec() + cself.CameraChain.camList[0].timeshiftCamToImuPrior
-        frameTimeScalar = frameTime.toScalar()
-        timeList.append(frameTimeScalar)
-    refStateTimes = np.array(timeList)
 
     imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
                       if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
                       and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
 
+    timeList = list()
+    for obs in cself.CameraChain.camList[0].targetObservations:
+        # Build a transformation expression for the time.
+        frameTime = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toExpression() + obs.time().toSec() + cself.CameraChain.camList[0].timeshiftCamToImuPrior
+        frameTimeScalar = frameTime.toScalar()
+        if frameTimeScalar > imuTimes[0] and frameTimeScalar < imuTimes[-1]:
+            timeList.append(frameTimeScalar)
+    refStateTimes = np.array(timeList)
+
+ 
     refPoseStream = open(filename.replace("bspline", "ref_pose",1), 'w')
     print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"  
     saveBsplineRefPose(imuTimes, poseSplineDv, stream=refPoseStream)
@@ -249,16 +252,46 @@ def saveBspline(cself, filename="bspline.txt"):
         np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
     return modelFile
 
+def removeUncoveredTimes(timeArray, timeShift):
+    length = timeArray.shape[0]
+    if timeShift > 0:
+        finishIndex = length-1
+        finishTime = timeArray[-1] - timeShift
+        for jack in range(length-1, -1, -1):
+            if timeArray[jack] < finishTime:
+                finishIndex = jack
+                break
+        if finishIndex == length-1 or finishIndex == 0:
+            raise ValueError('finishIndex is at the %d-th element of the timeArray of length %d though timeShift is %.9f' % (finishIndex, length, timeShift))
+        return timeArray[0:finishIndex+1]
+    elif timeShift < 0:
+        startIndex = 0
+        startTime = timeArray[0] - timeShift
+        for jack in range(0, length, 1):
+            if timeArray[jack] > startTime:
+                startIndex = jack
+                break
+        if startIndex == length-1 or startIndex == 0:
+            raise ValueError('startIndex is at the %d-th element of the timeArray of length %d though timeShift is %.9f' % (startIndex, length, timeShift))
+        return timeArray[startIndex:length]
+
 class RsVisualInertialMeasViaBsplineSimulator(object):
     '''simulate visual(rolling shutter) inertial measurements with a predefined BSpline model representing a realistic motion'''
     def __init__(self, filename="knotCoeffT.txt", targetYaml= "april_6x6.yaml", \
-      chainYaml='camchain.yaml', time_readout=30e-3):
+      chainYaml='camchain.yaml', time_offset=0.0, time_readout=30e-3):
         self.modelFilename = filename
         self.simulPoseSplineDv = loadBsplineModel(filename)        
         refTimeFile = filename.replace("knotCoeffT", "ref_camera_time", 1)
-        self.refStateTimes = np.loadtxt(refTimeFile)
+        fullRefStateTimes = np.loadtxt(refTimeFile)
+        if time_offset > 0:
+            timeShift = (time_offset + time_readout)*1.2 
+        else:
+            timeShift = (time_offset - time_readout)*1.2
+        self.refStateTimes = removeUncoveredTimes(fullRefStateTimes, timeShift)
         print >> sys.stdout, "  Camera frame sampling start time %.9f and finish time %.9f" % (self.refStateTimes[0], self.refStateTimes[-1])
-   
+        refStateTimeFile = filename.replace("knotCoeffT", "trimmed_state_time",1)    
+        np.savetxt(refStateTimeFile, self.refStateTimes.T, fmt='%.9f')
+
         print "  Reading camera chain:", chainYaml
         chain = kc.CameraChainParameters(chainYaml)        
         camNr=0
@@ -275,7 +308,8 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         print "which target is used in the simulation?"
         targetConfig.printDetails()
         self.setupCalibrationTarget(targetConfig, showExtraction=False, showReproj=False, imageStepping=False)
-        self.imageHeight = resolution[1]   
+        self.imageHeight = resolution[1]  
+        self.timeOffset = time_offset 
         self.lineDelay = time_readout/self.imageHeight
         print "line delay ", self.lineDelay
         self.landmark2ObservationList = dict()
@@ -347,20 +381,20 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         print "  ReproducedImageCorner shape ", imageCornerProjectedArray.shape, ' should be (144, 3, 1)'
         np.savetxt(reproducedImageCornerFile, np.concatenate((imageCornerProjectedArray[:,:,0], imageCornerProjectedArray2[:,:,0]), axis=1), fmt=['%.9f', '%.9f', '%d', '%.9f', '%.9f', '%d'])
 
-    def simulate(self, landmarkOutputFilename, reprojectionSigma, time_offset=0.0):
+    def simulate(self, landmarkOutputFilename, reprojectionSigma):
         '''simulate camera observations for frames at all ref state times and plus noise''' 
         print 'Reprojection Gaussian noise sigma %.5f' % reprojectionSigma
-        print 'Image time advance relative to Imu clock', time_offset
+        print 'Image time advance relative to Imu clock', self.timeOffset
              
         for frameId in range(0, self.refStateTimes.shape[0], 1):
              state_time = self.refStateTimes[frameId]
              line_delay = self.lineDelay
-             unusedCornerProjections, frameKeypoints = self.newtonMethodToRsProjection(state_time, line_delay, reprojectionSigma, time_offset)
+             unusedCornerProjections, frameKeypoints = self.newtonMethodToRsProjection(state_time, line_delay, reprojectionSigma, self.timeOffset)
              print '  Projected %4d' % len(frameKeypoints), 'target corners for state at %.9f' % state_time 
              for lmObs in frameKeypoints: #each lmObs (lmId, keypoint Id, x, y, size)
                  self.landmark2ObservationList[lmObs[0]].append((frameId, lmObs[1], lmObs[2], lmObs[3], lmObs[4]))
         lmStream = open(landmarkOutputFilename, 'w')
-        lmStream.write('%each line contains a landmark: lm id, lm p_w(homogeneous xyzw), num obs, <frameid> <keypoint id, x, y, size>, ... , <frameid> <keypoint id, x, y, size>\r\n')
+        lmStream.write('%each line contains a landmark: lm id, lm p_w(homogeneous xyzw), quality, num obs, <frameid> <keypoint id, x, y, size>, ... , <frameid> <keypoint id, x, y, size>\r\n')
         probe = 0
         homogeneousW = 1.0
         positionQuality = 1.0
