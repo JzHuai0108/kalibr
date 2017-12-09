@@ -299,12 +299,13 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         if self.modelFilename.find('/') != -1:
             pathStub = self.modelFilename.rsplit('/', 1)[0]   
         
-        trimmedStateFile = pathStub + "/initial_states_td" + str(time_offset).replace('.','',1)       
+        trimmedStateFile = pathStub + "/initial_states_td" + str(time_offset).replace('.','',1) + '.txt'       
         trimmedStateStream = open(trimmedStateFile, 'w')
         for iota in range(startIndex, finishIndex, 1):
             print >> trimmedStateStream, '%d %s %.9f' % (iota-startIndex, iota-startIndex, fullRefStates[iota, 2]), \
-              ' '.join(map(str, fullRefStates[iota, 3:19])), fullRefStates[iota, 19]
+              ' '.join(map(str, fullRefStates[iota, 3:19])), '%d' % fullRefStates[iota, 19]
         trimmedStateStream.close()
+        print "  Written simulated states to", trimmedStateFile
         print "  Reading camera chain:", chainYaml
         chain = kc.CameraChainParameters(chainYaml)        
         camNr=0

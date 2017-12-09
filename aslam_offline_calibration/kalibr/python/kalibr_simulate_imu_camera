@@ -121,10 +121,10 @@ def main():
        parsed.time_offset, parsed.time_readout)
     #simulator.simulateOneFrame()
     pathStub = ''
-    if modelFIle.find('/') != -1:
+    if modelFile.find('/') != -1:
         pathStub = modelFile.rsplit('/', 1)[0]   
         
-    refLandmarkFile = pathStub + "/initial_landmarks_td" + str(parsed.time_offset).replace('.','',1)
+    refLandmarkFile = pathStub + "/initial_landmarks_td" + str(parsed.time_offset).replace('.','',1) + '.txt'
     simulator.simulate(refLandmarkFile, parsed.reprojection_sigma)    
 
 if __name__ == "__main__": 
