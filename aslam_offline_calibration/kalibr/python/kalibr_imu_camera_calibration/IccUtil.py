@@ -232,10 +232,7 @@ def saveBspline(cself, filename="bspline.txt"):
     print >> sys.stdout, "  Saving system states at camera rate generated from B-spline to", refStateFile   
     saveBsplineRefStates(refStateTimes, poseSplineDv, cself, refStateStream)
     refStateStream.close()
-
-    refTimeFile = filename.replace("bspline", "ref_camera_time",1)    
-    np.savetxt(refTimeFile, refStateTimes.T, fmt='%.9f')
-
+   
     refImuFile = filename.replace("bspline", "ref_imu_meas",1)
     saveBsplineRefImuMeas(cself, refImuFile) 
   
@@ -263,7 +260,7 @@ def removeUncoveredTimes(timeArray, timeShift):
                 break
         if finishIndex == length-1 or finishIndex == 0:
             raise ValueError('finishIndex is at the %d-th element of the timeArray of length %d though timeShift is %.9f' % (finishIndex, length, timeShift))
-        return timeArray[0:finishIndex+1]
+        return 0, finishIndex+1
     elif timeShift < 0:
         startIndex = 0
         startTime = timeArray[0] - timeShift
@@ -273,7 +270,7 @@ def removeUncoveredTimes(timeArray, timeShift):
                 break
         if startIndex == length-1 or startIndex == 0:
             raise ValueError('startIndex is at the %d-th element of the timeArray of length %d though timeShift is %.9f' % (startIndex, length, timeShift))
-        return timeArray[startIndex:length]
+        return startIndex, length
 
 class RsVisualInertialMeasViaBsplineSimulator(object):
     '''simulate visual(rolling shutter) inertial measurements with a predefined BSpline model representing a realistic motion'''
@@ -281,17 +278,33 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
       chainYaml='camchain.yaml', time_offset=0.0, time_readout=30e-3):
         self.modelFilename = filename
         self.simulPoseSplineDv = loadBsplineModel(filename)        
-        refTimeFile = filename.replace("knotCoeffT", "ref_camera_time", 1)
-        fullRefStateTimes = np.loadtxt(refTimeFile)
+
+        
+        refStateFile = filename.replace("knotCoeffT", "ref_state", 1)
+        fullRefStates = loadArrayWithHeader(refStateFile)
+
+        if fullRefStates.shape[1] != 20:
+            raise ValueError('Each row of states is expected to have 20 columns rather than %d' % fullRefStates.shape[1])
+
+        fullRefStateTimes = fullRefStates[:, 2]
         if time_offset > 0:
             timeShift = (time_offset + time_readout)*1.2 
         else:
             timeShift = (time_offset - time_readout)*1.2
-        self.refStateTimes = removeUncoveredTimes(fullRefStateTimes, timeShift)
+        startIndex, finishIndex = removeUncoveredTimes(fullRefStateTimes, timeShift)
+       
+        self.refStateTimes = fullRefStateTimes[startIndex:finishIndex]
         print >> sys.stdout, "  Camera frame sampling start time %.9f and finish time %.9f" % (self.refStateTimes[0], self.refStateTimes[-1])
-        refStateTimeFile = filename.replace("knotCoeffT", "trimmed_state_time",1)    
-        np.savetxt(refStateTimeFile, self.refStateTimes.T, fmt='%.9f')
-
+        pathStub = ''
+        if self.modelFilename.find('/') != -1:
+            pathStub = self.modelFilename.rsplit('/', 1)[0]   
+        
+        trimmedStateFile = pathStub + "/initial_states_td" + str(time_offset).replace('.','',1)       
+        trimmedStateStream = open(trimmedStateFile, 'w')
+        for iota in range(startIndex, finishIndex, 1):
+            print >> trimmedStateStream, '%d %s %.9f' % (iota-startIndex, iota-startIndex, fullRefStates[iota, 2]), \
+              ' '.join(map(str, fullRefStates[iota, 3:19])), fullRefStates[iota, 19]
+        trimmedStateStream.close()
         print "  Reading camera chain:", chainYaml
         chain = kc.CameraChainParameters(chainYaml)        
         camNr=0
@@ -565,6 +578,11 @@ def saveBsplineRefStates(times, poseSplineDv, cself, stream=sys.stdout, T_b_c=sm
         ' '.join(map(str,sm_T_w_b.q())), ' '.join(map(str,v_w)), \
         ' '.join(map(str, gyro_bias)), ' '.join(map(str, acc_bias)), 1
         frameId += 1
+
+def loadArrayWithHeader(arrayFile):
+    with open(arrayFile) as f:
+        lines = (line for line in f if not (line.startswith('#') or line.startswith('%')))        
+        return np.loadtxt(lines, delimiter=' ', skiprows=0)
 
 def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c=sm.Transformation()):
     timeOffsetPadding = 0.0  

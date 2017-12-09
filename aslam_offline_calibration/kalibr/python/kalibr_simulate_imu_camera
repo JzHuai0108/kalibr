@@ -48,8 +48,7 @@ def parseArgs():
     Example usage to calibrate a camera system against an IMU using an aprilgrid
     with temporal calibration enabled.
     
-    %(prog)s --bag MYROSBAG.bag --cam camchain.yaml --imu imu.yaml \\
-             --target aprilgrid.yaml --time-calibration
+    %(prog)s --cam camchain.yaml --target aprilgrid.yaml --time-calibration
     
     camchain.yaml: is the camera-system calibration output of the multiple-camera
                    calibratin tool (kalibr_calibrate_cameras)
@@ -121,7 +120,11 @@ def main():
     simulator = util.RsVisualInertialMeasViaBsplineSimulator(modelFile, targetFile, camChainYaml,\
        parsed.time_offset, parsed.time_readout)
     #simulator.simulateOneFrame()
-    refLandmarkFile = modelFile.replace("knotCoeffT", "ref_landmarks", 1)
+    pathStub = ''
+    if modelFIle.find('/') != -1:
+        pathStub = modelFile.rsplit('/', 1)[0]   
+        
+    refLandmarkFile = pathStub + "/initial_landmarks_td" + str(parsed.time_offset).replace('.','',1)
     simulator.simulate(refLandmarkFile, parsed.reprojection_sigma)    
 
 if __name__ == "__main__": 
