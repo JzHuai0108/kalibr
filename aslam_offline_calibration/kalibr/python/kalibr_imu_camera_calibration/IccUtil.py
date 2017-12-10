@@ -538,7 +538,7 @@ def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transfor
             continue       
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
         sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c     
-        print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str,sm_T_w_c.q()))
+        print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str, sm.quatInv(sm_T_w_c.q())))
       
 def saveBsplineRefStates(times, poseSplineDv, cself, stream=sys.stdout, T_b_c=sm.Transformation()):
     '''save the system states at the camera reference times in a customized format. system states are (T_w_b(txyz, qxyzw), v_w, bg, ba)'''
@@ -576,7 +576,7 @@ def saveBsplineRefStates(times, poseSplineDv, cself, stream=sys.stdout, T_b_c=sm
         acc_bias = accBias.evalD(timeScalar,0)
         
         print >> stream, frameId, frameId, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_b.t())), \
-        ' '.join(map(str,sm_T_w_b.q())), ' '.join(map(str,v_w)), \
+        ' '.join(map(str, sm.quatInv(sm_T_w_b.q()))), ' '.join(map(str,v_w)), \
         ' '.join(map(str, gyro_bias)), ' '.join(map(str, acc_bias)), 1
         frameId += 1
 
