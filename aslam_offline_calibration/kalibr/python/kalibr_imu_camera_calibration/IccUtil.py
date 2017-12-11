@@ -250,7 +250,7 @@ def saveBspline(cself, filename="bspline.txt"):
     return modelFile
 
 def removeUncoveredTimes(timeArray, timeShift):
-    length = timeArray.shape[0]
+    length = timeArray.shape[0]      
     if timeShift > 0:
         finishIndex = length-1
         finishTime = timeArray[-1] - timeShift
@@ -271,6 +271,8 @@ def removeUncoveredTimes(timeArray, timeShift):
         if startIndex == length-1 or startIndex == 0:
             raise ValueError('startIndex is at the %d-th element of the timeArray of length %d though timeShift is %.9f' % (startIndex, length, timeShift))
         return startIndex, length
+    else:
+        return 0, length
 
 class RsVisualInertialMeasViaBsplineSimulator(object):
     '''simulate visual(rolling shutter) inertial measurements with a predefined BSpline model representing a realistic motion'''
@@ -438,11 +440,14 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
             lastImagePoint = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) #3x1, generated with the GS model
             if lastImagePoint[2, 0] == 0.0:
                 continue
-
+            
             numIter = 0  
             aborted = False 
             if verbose:  
-                print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T           
+                print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T  
+            if np.absolute(line_delay) < 1e-8:
+                imageCornerProjected.append(lastImagePoint)
+                continue         
             while numIter < 8:
                 currTime = (lastImagePoint[1, 0] - self.imageHeight/2)*line_delay + state_time            
                 sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)
@@ -481,7 +486,14 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
             numIter = 0
             aborted = False
             if verbose:  
-                print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T     
+                print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T
+            if np.absolute(line_delay) < 1e-8:
+                imageCornerProjected.append(lastImagePoint)
+                xnoise = gauss(0.0, reprojectionSigma)
+                ynoise = gauss(0.0, reprojectionSigma)
+                frameKeypoints.append((iota, kpId, lastImagePoint[0, 0] + xnoise, lastImagePoint[1, 0] + ynoise, 12))
+                kpId += 1        
+                continue      
             # solve y=g(y) where y is the vertical projection in pixels
             while numIter < 8:
                 # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
