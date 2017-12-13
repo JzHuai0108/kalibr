@@ -473,13 +473,13 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         frameKeypoints = list()
         kpId = 0
         if verbose:
-            print 'Newton method for state time %.9f' % state_time
-        if state_time <= self.simulPoseSplineDv.spline().t_min() or state_time >= self.simulPoseSplineDv.spline().t_max():
-            print "Warn: %.9f time out of range [%.9f, %.9f] in newton method Rs simulation" % (state_time, self.simulPoseSplineDv.spline().t_min(), self.simulPoseSplineDv.spline().t_max())
+            print 'Newton method for state time %.9f with time offset %.9f' % (state_time, time_offset)
+        if state_time + time_offset <= self.simulPoseSplineDv.spline().t_min() or state_time + time_offset >= self.simulPoseSplineDv.spline().t_max():
+            print "Warn: %.9f time out of range [%.9f, %.9f] in newton method Rs simulation" % (state_time + time_offset, self.simulPoseSplineDv.spline().t_min(), self.simulPoseSplineDv.spline().t_max())
             return np.array([[[]]]), frameKeypoints
        
         for iota in range(self.simulatedObs.getTotalTargetPoint()): 
-            sm_T_w_c, isValid = getCameraPoseAt(state_time, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)       
+            sm_T_w_c, isValid = getCameraPoseAt(state_time + time_offset, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)       
             lastImagePoint = self.simulatedObs.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) #3x1, this is GS camera model
             if not isValid or lastImagePoint[2, 0] == 0.0:
                 continue
