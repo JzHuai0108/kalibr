@@ -1,6 +1,6 @@
 from sm import PlotCollection
 import IccPlots as plots
-
+import matplotlib.pyplot as plt #plt.hist
 import aslam_backend as aopt
 import aslam_cv as acv
 import aslam_cameras_april as acv_april
@@ -391,8 +391,16 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
              state_time = self.refStateTimes[0]
              line_delay = self.lineDelay             
              imageCornerProjectedArray = self.naiveMethodToRsProjection(state_time, line_delay, True)
-             imageCornerProjectedArray2, unusedDesc = self.newtonMethodToRsProjection(state_time, line_delay, 1.0, 0.0, True)
+             imageCornerProjectedArray2, unusedKeypoints, unusedImageOffset = self.newtonMethodToRsProjection(state_time, line_delay, 1.0, 0.0, True)        
 
+        imageCornerOffsetNorms = list()
+        bins = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 9.0, 10.0]
+        imageCornerOffsetNorms += unusedImageOffset
+        counts, newBins, patches = plt.hist(imageCornerOffsetNorms, bins)
+        print '  counts', counts, '\n  bins\t', newBins
+        plt.title('Distribution of offset infinity norm due to line delay and noise')
+        plt.show()
+       
         reproducedImageCornerFile = self.modelFilename.replace("knotCoeffT", "sampleImageCornersByNaiveAndNewton", 1)
         print "  ReproducedImageCorner shape ", imageCornerProjectedArray.shape, ' should be (144, 3, 1)'
         np.savetxt(reproducedImageCornerFile, np.concatenate((imageCornerProjectedArray[:,:,0], imageCornerProjectedArray2[:,:,0]), axis=1), fmt=['%.9f', '%.9f', '%d', '%.9f', '%.9f', '%d'])
@@ -401,11 +409,14 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         '''simulate camera observations for frames at all ref state times and plus noise''' 
         print 'Reprojection Gaussian noise sigma %.5f' % reprojectionSigma
         print 'Image time advance relative to Imu clock', self.timeOffset
-             
+        
+        imageCornerOffsetNorms = list()
+        bins = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 9.0, 10.0]
         for frameId in range(0, self.refStateTimes.shape[0], 1):
              state_time = self.refStateTimes[frameId]
              line_delay = self.lineDelay
-             unusedCornerProjections, frameKeypoints = self.newtonMethodToRsProjection(state_time, line_delay, reprojectionSigma, self.timeOffset)
+             unusedCornerProjections, frameKeypoints, imageCornerOffset = self.newtonMethodToRsProjection(state_time, line_delay, reprojectionSigma, self.timeOffset)
+             imageCornerOffsetNorms += imageCornerOffset
              print '  Projected %4d' % len(frameKeypoints), 'target corners for state at %.9f' % state_time 
              for lmObs in frameKeypoints: #each lmObs (lmId, keypoint Id, x, y, size)
                  self.landmark2ObservationList[lmObs[0]].append((frameId, lmObs[1], lmObs[2], lmObs[3], lmObs[4]))
@@ -425,6 +436,11 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         lmStream.close()
         print '  Written landmark observations to', landmarkOutputFilename
         print '  To use the simulated dataset, you need to pull out the gravity vector from report-...-dynamic.pdf and plug it into the customized bundle adjustment calibrator'
+        print '  Histogram of the infinity norm the offset due to line delay and noise'
+        counts, newBins, patches = plt.hist(imageCornerOffsetNorms, bins)
+        print '  counts', counts, '\n  bins\t', newBins        
+        plt.title('Distribution of offset infinity norm due to line delay and noise')        
+        plt.show()
         print
 
     def naiveMethodToRsProjection(self, state_time, line_delay, verbose=False):   
@@ -469,14 +485,15 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
         return np.array(imageCornerProjected)
     
     def newtonMethodToRsProjection(self, state_time, line_delay, reprojectionSigma = 1.0, time_offset=0.0, verbose = False):    
-        imageCornerProjected = list()
+        imageCornerProjected = list() #image keypoints free of noise effect
+        imageCornerProjectedOffset = list() # the pixel offset due to line delay and noise effect
         frameKeypoints = list()
         kpId = 0
         if verbose:
             print 'Newton method for state time %.9f with time offset %.9f' % (state_time, time_offset)
         if state_time + time_offset <= self.simulPoseSplineDv.spline().t_min() or state_time + time_offset >= self.simulPoseSplineDv.spline().t_max():
             print "Warn: %.9f time out of range [%.9f, %.9f] in newton method Rs simulation" % (state_time + time_offset, self.simulPoseSplineDv.spline().t_min(), self.simulPoseSplineDv.spline().t_max())
-            return np.array([[[]]]), frameKeypoints
+            return np.array([[[]]]), frameKeypoints, list()
        
         for iota in range(self.simulatedObs.getTotalTargetPoint()): 
             sm_T_w_c, isValid = getCameraPoseAt(state_time + time_offset, self.simulPoseSplineDv, T_b_c=self.T_imu_c0)       
@@ -488,13 +505,15 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
             if verbose:  
                 print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T
             if np.absolute(line_delay) < 1e-8:
-                imageCornerProjected.append(lastImagePoint)
+                imageCornerProjected.append(lastImagePoint)          
                 xnoise = gauss(0.0, reprojectionSigma)
                 ynoise = gauss(0.0, reprojectionSigma)
+                imageCornerProjectedOffset.append(max(np.abs(xnoise), np.abs(ynoise)))
                 frameKeypoints.append((iota, kpId, lastImagePoint[0, 0] + xnoise, lastImagePoint[1, 0] + ynoise, 12))
                 kpId += 1        
                 continue      
             # solve y=g(y) where y is the vertical projection in pixels
+            initialImagePoint = lastImagePoint
             while numIter < 8:
                 # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
 
@@ -529,13 +548,15 @@ class RsVisualInertialMeasViaBsplineSimulator(object):
                 print
             if not aborted:
                 #TODO: randomly mask some landmark observations
-                imageCornerProjected.append(imagePoint0)
+                imageCornerProjected.append(imagePoint0)                
                 xnoise = gauss(0.0, reprojectionSigma)
                 ynoise = gauss(0.0, reprojectionSigma)
                 frameKeypoints.append((iota, kpId, imagePoint0[0, 0] + xnoise, imagePoint0[1, 0] + ynoise, 12))
+                imageCornerProjectedOffset.append(max(np.abs(initialImagePoint[0, 0] - imagePoint0[0, 0] - xnoise), \
+                  np.abs(initialImagePoint[1, 0] - imagePoint0[1, 0] - ynoise)))
                 kpId += 1        
         assert kpId == len(imageCornerProjected)
-        return np.array(imageCornerProjected), frameKeypoints
+        return np.array(imageCornerProjected), frameKeypoints, imageCornerProjectedOffset
     
 
 def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
