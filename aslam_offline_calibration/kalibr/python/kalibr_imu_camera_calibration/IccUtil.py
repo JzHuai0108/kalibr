@@ -570,7 +570,8 @@ def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transfor
             print >> sys.stdout, "Warn: time out of range "
             continue       
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
-        sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c     
+        sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c
+        # quatInv used here to convert kalibr's JPL quaternion to Halmilton quaternion
         print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str, sm.quatInv(sm_T_w_c.q())))
       
 def saveBsplineRefStates(times, poseSplineDv, cself, stream=sys.stdout, T_b_c=sm.Transformation()):
@@ -607,7 +608,7 @@ def saveBsplineRefStates(times, poseSplineDv, cself, stream=sys.stdout, T_b_c=sm
         
         gyro_bias = gyroBias.evalD(timeScalar,0)   
         acc_bias = accBias.evalD(timeScalar,0)
-        
+        # quatInv used here to convert kalibr's JPL quaternion to Halmilton quaternion
         print >> stream, frameId, frameId, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_b.t())), \
         ' '.join(map(str, sm.quatInv(sm_T_w_b.q()))), ' '.join(map(str,v_w)), \
         ' '.join(map(str, gyro_bias)), ' '.join(map(str, acc_bias)), 1

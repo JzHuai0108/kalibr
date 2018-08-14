@@ -45,8 +45,9 @@ def parseArgs():
             return formatter.format_help()     
         
     usage = """
-    Example usage to calibrate a camera system against an IMU using an aprilgrid
-    with temporal calibration enabled.
+    Example usage to generate the visual inertial system states at specific epochs and
+     observations of a calibration target with a rolling shutter camera model and
+     inertial measurements based on a given B-spline in the 15 dimensional state space.
     
     %(prog)s --cam camchain.yaml --target aprilgrid.yaml --time-calibration
     

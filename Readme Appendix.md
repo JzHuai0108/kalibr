@@ -1,14 +1,14 @@
-Install Kalibr from source on Ubuntu 16.04 with ROS Kinetic
+# Install Kalibr from source on Ubuntu 16.04 with ROS Kinetic
 
-# Install dependencies as instructed on the Wiki of Kalibr on github
+## Install dependencies as instructed on the Wiki of Kalibr on github
 ```
 sudo apt-get install python-setuptools python-rosinstall ipython libeigen3-dev libboost-all-dev doxygen libopencv-dev ros-kinetic-vision-opencv ros-kinetic-image-transport-plugins ros-kinetic-cmake-modules python-software-properties software-properties-common libpoco-dev python-matplotlib python-scipy python-git python-pip ipython libtbb-dev libblas-dev liblapack-dev python-catkin-tools libv4l-dev 
 ```
-# Install the additional python packages
+## Install the additional python packages
 ```
 sudo apt-get install python-wxversion python-wxtools
 ```
-# Install python-igraph via
+## Install python-igraph via
 ```
 sudo pip install python-igraph --upgrade
 ```
@@ -20,18 +20,23 @@ Don't fuss about it. Simply ignore it and go ahead to build kalibr with catkin_m
 
 # Simulate monocular inertial data
 
-## Download the imu camera calibration dataset, and generate a B spline model
+1. Record an imu camera calibration dataset and generate a B-spline model
+
+The dataset can be the imu camera calibration sample data provided by Kalibr
+
 ```
 kalibr_calibrate_imu_camera --cam camchain.yaml --target april_6x6.yaml --imu imu_adis16448.yaml --bag dynamic.bag
 ```
+The output results will include the B-spline model, knotCoeffT, and ref_pose, ref_state, ref_imu_meas generated from the model. More details refer to saveBspline in python/kalibr_imu_camera_calibration/IccUtil.py.
 
-## Simulate rolling shutter camera measurements
+2. Based on the B-spline model, simulate rolling shutter camera measurements
+
 ```
-kalibr_simulate_imu_camera "knotCoeffT.txt" april_6x6.yaml
+kalibr_simulate_imu_camera --model-file "knotCoeffT.txt" --time-offset 0.6 --time-readout 0 --frame-rate 30 --target april_6x6.yaml
 
 ```
 
-# Crash on design variables
+# A crash course on design variables
 Design variable groups used in kalibr\_calibrate\_imu_camera
 ```
 poseDv(spline)
