@@ -341,7 +341,7 @@ class RsCalibrator(object):
                     # thus we must skip those measurements that are of a keypoint that isn't visible
                     keypoint_ids = observation.getCornersIdx()
                     if not np.any(keypoint_ids[index]==keypoint_ids0):
-                       sm.logWarn("landmark {0} in frame {1} not in first frame".format(keypoint_ids[index],frameid))
+                    #    sm.logWarn("landmark {0} in frame {1} not in first frame".format(keypoint_ids[index],frameid))
                        continue
 
                     # transform target point to camera frame
