@@ -97,6 +97,12 @@ def __parseArgs():
 
     groupOpt = parser.add_argument_group('Optimization options')
     groupOpt.add_argument('--max-iter', type=int, default=30, dest='max_iter', help='Max. iterations (default: %(default)s).', required=False)
+    groupOpt.add_argument('--lock-intrinsics', action='store_true', dest='lock_intrinsics', help='Disable the intrinsics calibration', required=False)      
+    groupOpt.add_argument('--lock-distortion', action='store_true', dest='lock_distortion', help='Disable the distortion calibration', required=False)      
+
+    groupCam = parser.add_argument_group('Camera system configuration')
+    groupCam.add_argument('--cams', dest='chain_yaml', help=('Camera system configuration as yaml file.\n'
+        'If camera yaml is provided, then values from the yaml will be used for initializing the camera'), required=False)
 
     outputSettings = parser.add_argument_group('Output options')
     outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Enable (really) verbose output (disables plots).')
@@ -167,6 +173,9 @@ def main():
     config.framerate = parsed.framerate
     config.timeOffsetConstantSparsityPattern = 0.08
     config.timeOffsetPadding = 0.5
+    config.estimateParameters['intrinsics'] = not parsed.lock_intrinsics
+    config.estimateParameters['distortion'] = not parsed.lock_distortion
+    config.chain_yaml = parsed.chain_yaml
 
     ######
     ## Calibrate

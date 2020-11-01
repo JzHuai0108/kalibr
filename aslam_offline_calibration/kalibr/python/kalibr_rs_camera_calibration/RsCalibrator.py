@@ -6,6 +6,7 @@ import aslam_cv as acv
 import aslam_splines as asp
 import incremental_calibration as inc
 import bsplines
+import kalibr_common as kc
 import numpy as np
 import multiprocessing
 import sys
@@ -73,6 +74,9 @@ class RsCalibratorConfiguration(object):
     """The approximate framerate of the camera. Required as approximate threshold in adaptive
     knot placement and for initializing a knot sequence if no number of knots is given.
     """
+
+    chain_yaml = None
+    """Camera system configuration yaml. If provided, it will be used to initialize the camera projection and distortion parameters!"""
 
     def validate(self, isRollingShutter):
         """Validate the configuration."""
@@ -216,8 +220,16 @@ class RsCalibrator(object):
         if (self.__isRollingShutter()):
             sensorRows = self.__observations[0].imRows()
             self.__camera.shutter().setParameters(np.array([1.0 / self.__config.framerate / float(sensorRows)]))
-
-        return self.__camera.initializeIntrinsics(self.__observations)
+        status = self.__camera.initializeIntrinsics(self.__observations)
+        if status and self.__config.chain_yaml:
+            print('Initial projection and distortion parameters {}'.format(self.__camera.getParameters(True, True, True).T))
+            camchain = kc.CameraChainParameters(self.__config.chain_yaml)
+            camConfig = camchain.getCameraParameters(0)
+            camera_model, intrinsics = camConfig.getIntrinsics()
+            dist_model, dist_coeff = camConfig.getDistortion()
+            self.__camera.setParameters(np.hstack([intrinsics, dist_coeff]), True, True, False)
+            print('External projection and distortion parameters {}'.format(self.__camera.getParameters(True, True, True).T))
+        return status
 
     def __getMotionModelPriorOrDefault(self):
         """Get the motion model prior or the default value"""
