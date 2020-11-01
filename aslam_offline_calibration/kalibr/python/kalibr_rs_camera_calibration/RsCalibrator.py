@@ -21,6 +21,8 @@ import pdb
 np.set_printoptions(suppress=True)
 
 CALIBRATION_GROUP_ID = 0
+TRANSFORMATION_GROUP_ID = 1
+LANDMARK_GROUP_ID = 2
 
 class RsCalibratorConfiguration(object):
     deltaX = 1e-8
@@ -279,15 +281,14 @@ class RsCalibrator(object):
         #####
         # add all the landmarks once
         landmarks = []
-        landmarks_expr = {}
-        keypoint_ids0 = self.__observations[0].getCornersIdx()
-        for idx, landmark in enumerate(self.__observations[0].getCornersTargetFrame()):
-            # design variable for landmark
-            landmark_w_dv = aopt.HomogeneousPointDv(sm.toHomogeneous(landmark))
-            landmark_w_dv.setActive(self.__config.estimateParameters['landmarks']);
+        landmarks_expr = []
+        target = self.__cameraGeometry.ctarget.detector.target()
+        for i in range(0, target.size()):
+            landmark_w_dv = aopt.HomogeneousPointDv(sm.toHomogeneous(target.point(i)))
+            landmark_w_dv.setActive(self.__config.estimateParameters['landmarks'])
             landmarks.append(landmark_w_dv)
-            landmarks_expr[keypoint_ids0[idx]] = landmark_w_dv.toExpression()
-            problem.addDesignVariable(landmark_w_dv, CALIBRATION_GROUP_ID)
+            landmarks_expr.append(landmark_w_dv.toExpression())
+            problem.addDesignVariable(landmark_w_dv, LANDMARK_GROUP_ID)
 
         #####
         # activate design variables
@@ -312,7 +313,7 @@ class RsCalibrator(object):
 
         #####
         # add a reprojection error for every corner of each observation
-        for frameid, observation in enumerate(self.__observations):
+        for observation in self.__observations:
             # only process successful observations of a pattern
             if (observation.hasSuccessfulObservation()):
                 # add a frame
@@ -323,8 +324,8 @@ class RsCalibrator(object):
 
                 #####
                 # add an error term for every observed corner
+                corner_id_list = observation.getCornersIdx()
                 for index, point in enumerate(observation.getCornersImageFrame()):
-
                     # keypoint time offset by line delay as expression type
                     keypoint_time = self.__camera_dv.keypointTime(frame.time(), point)
 
@@ -336,24 +337,15 @@ class RsCalibrator(object):
                     )
                     T_t_w = T_w_t.inverse()
 
-                    # we only have the the first image's design variables
-                    # so any landmark that is not in that frame won't be in the problem
-                    # thus we must skip those measurements that are of a keypoint that isn't visible
-                    keypoint_ids = observation.getCornersIdx()
-                    if not np.any(keypoint_ids[index]==keypoint_ids0):
-                    #    sm.logWarn("landmark {0} in frame {1} not in first frame".format(keypoint_ids[index],frameid))
-                       continue
-
                     # transform target point to camera frame
-                    p_t = T_t_w * landmarks_expr[keypoint_ids[index]]
+                    p_t = T_t_w * landmarks_expr[corner_id_list[index]]
 
                     # create the keypoint
                     keypoint_index = frame.numKeypoints()
                     keypoint = acv.Keypoint2()
                     keypoint.setMeasurement(point)
-                    inverseFeatureCovariance = self.__config.inverseFeatureCovariance;
+                    inverseFeatureCovariance = self.__config.inverseFeatureCovariance
                     keypoint.setInverseMeasurementCovariance(np.eye(len(point)) * inverseFeatureCovariance)
-                    keypoint.setLandmarkId(keypoint_index)
                     frame.addKeypoint(keypoint)
 
                     # create reprojection error
