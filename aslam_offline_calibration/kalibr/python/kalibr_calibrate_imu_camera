@@ -9,9 +9,6 @@ import argparse
 import signal
 import sys   
 
-from string import maketrans
-import os #dirname
-
 # make numpy print prettier
 np.set_printoptions(suppress=True)
 
@@ -215,33 +212,22 @@ def main():
     util.printResults(iCal, withCov=parsed.recover_cov)
 
     print
-    if(0):
-        bagtag = parsed.bagfile[0].translate(None, "<>:/\|?*").replace('.bag', '', 1)    
-    else:
-        intab = '<>:/\|?*'
-        outtab = '--------'
-        trantab = maketrans(intab, outtab)
-        bagtag = parsed.bagfile[0].translate(trantab).replace('.bag', '', 1)
-    stub = os.path.dirname(parsed.bagfile[0])     
-
-    yamlFilename = stub + "/camchain-imucam-" + bagtag + ".yaml"
+    bagtag = parsed.bagfile[0].translate(None, "<>:/\|?*").replace('.bag', '', 1)
+    yamlFilename = "camchain-imucam-" + bagtag + ".yaml"
     iCal.saveCamChainParametersYaml(yamlFilename)
     print "  Saving camera chain calibration to file: {0}".format(yamlFilename)
 
     print
-    yamlFilename = stub + "/imu-" + bagtag + ".yaml"
+    yamlFilename = "imu-" + bagtag + ".yaml"
     iCal.saveImuSetParametersYaml(yamlFilename)
     print "  Saving imu calibration to file: {0}".format(yamlFilename)
 
-    resultFileTxt = stub + "/results-imucam-" + bagtag + ".txt"
+    resultFileTxt = "results-imucam-" + bagtag + ".txt"
     util.saveResultTxt(iCal, filename=resultFileTxt)
     print "  Detailed results written to file: {0}".format(resultFileTxt)
-
-    trajFilenameStub = stub + "/bspline-imucam-" + bagtag + ".txt"
-    modelFile = util.saveBspline(iCal, filename=trajFilenameStub)
     
-    print "  Generating result report..."    
-    reportFile = stub + "/report-imucam-" + bagtag + ".pdf"
+    print "Generating result report..."    
+    reportFile = "report-imucam-" + bagtag + ".pdf"
     util.generateReport(iCal, filename=reportFile, showOnScreen=not parsed.dontShowReport)
     print "  Report written to {0}".format(reportFile)
     print
