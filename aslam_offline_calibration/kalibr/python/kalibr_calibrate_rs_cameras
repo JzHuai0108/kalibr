@@ -93,7 +93,7 @@ def __parseArgs():
 
     groupTarget = parser.add_argument_group('Calibration target configuration')
     groupTarget.add_argument('--target', dest='targetYaml', help='Calibration target configuration as yaml file.', required=True)
-    groupTarget.add_argument('--inverse-feature-variance', dest='inverseFeatureVariance', type=float, help='Estimated inverse variance of the feature detector.', required=True)
+    groupTarget.add_argument('--feature-variance', dest='featureVariance', type=float, help='Estimated variance of the feature detector.', required=True)
 
     groupOpt = parser.add_argument_group('Optimization options')
     groupOpt.add_argument('--max-iter', type=int, default=30, dest='max_iter', help='Max. iterations (default: %(default)s).', required=False)
@@ -168,7 +168,7 @@ def main():
 
     # Calibration Configuration
     config = rscc.RsCalibratorConfiguration()
-    config.inverseFeatureCovariance = 1.0/parsed.inverseFeatureVariance
+    config.inverseFeatureCovariance = 1.0/parsed.featureVariance
     config.maxNumberOfIterations = parsed.max_iter
     config.framerate = parsed.framerate
     config.timeOffsetConstantSparsityPattern = 0.08
