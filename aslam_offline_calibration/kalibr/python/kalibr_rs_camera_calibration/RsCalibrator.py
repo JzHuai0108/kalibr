@@ -142,7 +142,7 @@ class RsCalibrator(object):
         self.__camera_dv = cameraGeometry.dv
         self.__camera = cameraGeometry.geometry
         self.__config = config
-
+        self.__std_camera = None
         self.__config.validate(self.__isRollingShutter())
 
         # obtain initial guesses for extrinsics and intrinsics
@@ -424,7 +424,7 @@ class RsCalibrator(object):
         for i in range(0, self.__poseSpline_dv.numDesignVariables()):
             dv = self.__poseSpline_dv.designVariable(i)
             dv.setActive(self.__config.estimateParameters['pose'])
-            problem.addDesignVariable(dv, CALIBRATION_GROUP_ID)
+            problem.addDesignVariable(dv, TRANSFORMATION_GROUP_ID)
 
     def __runOptimization(self, problem ,deltaJ, deltaX, maxIt):
         """Run the given optimization problem problem"""
@@ -451,7 +451,33 @@ class RsCalibrator(object):
         optimizer.setProblem(problem)
 
         # go for it:
-        return optimizer.optimize()
+        status = optimizer.optimize()
+        recoverCov = False
+        if status and recoverCov:
+            self.recoverCovariance(problem)
+        return status
+
+    def recoverCovariance(self, problem):
+        #Covariance ordering (=dv ordering)
+        #ORDERING:   N=num cams
+        #            camera -->  sum(sub) * N
+        #                a) shutter    --> 1
+        #                b) projection --> omni:5, pinhole: 4
+        #                c) distortion --> 4
+        estimator = inc.IncrementalEstimator(CALIBRATION_GROUP_ID)
+        rval = estimator.addBatch(problem, True)
+        est_stds = np.sqrt(estimator.getSigma2Theta().diagonal())
+
+        #split and store the variance
+        std_camera = list()
+        offset=0
+        nt = self.__camera.geometry.minimalDimensionsShutter() +  \
+            self.__camera.geometry.minimalDimensionsProjection() +  \
+            self.__camera.geometry.minimalDimensionsDistortion()      
+        std_camera.extend(est_stds[offset:offset+nt].flatten().tolist())
+        offset = offset+nt
+        self.__std_camera = std_camera
+        print('std_camera: {}'.format(std_camera)) 
 
     def __isRollingShutter(self):
         return self.__cameraModelFactory.shutterType == acv.RollingShutter
@@ -460,11 +486,18 @@ class RsCalibrator(object):
         shutter = self.__camera_dv.shutterDesignVariable().value()
         proj = self.__camera_dv.projectionDesignVariable().value()
         dist = self.__camera_dv.distortionDesignVariable().value()
-        print
-        if (self.__isRollingShutter()):
-            print "LineDelay:"
-            print shutter.lineDelay()
-        print "Intrinsics:"
-        print proj.getParameters().flatten()
-        print "Distortion:"
-        print dist.getParameters().flatten()
+        print('\n')
+        if not self.__std_camera:
+            if (self.__isRollingShutter()):
+                print("LineDelay: {}".format(shutter.lineDelay()))
+            p = proj.getParameters().flatten()
+            print("Intrinsics: {}".format(p))
+            d = dist.getParameters().flatten()
+            print("Distortion: {}".format(d))
+        else:
+            if (self.__isRollingShutter()):
+                print("LineDelay: {} +/- {}".format(shutter.lineDelay(), self.__std_camera[0]))
+            p = proj.getParameters().flatten()
+            print("Intrinsics: {} +/- {}".format(p, self.__std_camera[1:1+p.shape[0]]))
+            d = dist.getParameters().flatten()
+            print("Distortion: {} +/- {}".format(d, self.__std_camera[1+p.shape[0]:]))

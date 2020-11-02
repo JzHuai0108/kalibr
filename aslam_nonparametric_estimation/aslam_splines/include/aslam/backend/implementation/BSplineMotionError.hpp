@@ -1,5 +1,6 @@
 #include <aslam/backend/BSplineMotionError.hpp>
 #include <stdio.h>
+#include <sm/logging.hpp>
 namespace aslam {
     namespace backend {
         
@@ -83,7 +84,7 @@ namespace aslam {
         {
                       
           // this is an error...
-          SM_THROW(Exception, "This is currently unsupported");
+          SM_WARN("BSplineMotionError<SPLINE_T>::evaluateJacobiansImplementation is currently void");
           
         }
           
