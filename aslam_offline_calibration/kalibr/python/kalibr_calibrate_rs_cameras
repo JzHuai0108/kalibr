@@ -20,6 +20,7 @@ import argparse
 import sys
 import random
 import signal
+import time
 
 np.set_printoptions(suppress=True)
 
@@ -164,7 +165,12 @@ def main():
     cameraGeometry = kcc.CameraGeometry(cameraModel, targetConfig, dataset, verbose=(parsed.verbose or parsed.showextraction))
 
     # extract observations
+    # Because of python2, perf_counter is not available. 
+    # Because of Unix, we choose to use time.time() instead of time.clock().
+    tic = time.time()
     observations = __extractObservations(cameraGeometry,(parsed.verbose or parsed.showextraction))
+    toc = time.time()
+    extract_time = toc - tic
 
     # Calibration Configuration
     config = rscc.RsCalibratorConfiguration()
@@ -180,7 +186,12 @@ def main():
     ######
     ## Calibrate
     calibrator = rscc.RsCalibrator()
+    tic = time.time()
     calibrator.calibrate(cameraGeometry, observations, config)
+    toc = time.time()
+    calibrate_time = toc - tic
+    print("Timing (sec): Extraction observations {:.4f}, rolling shutter calibration {:.4f}".format(
+        extract_time, calibrate_time))
 
 if __name__ == "__main__":
     try:
