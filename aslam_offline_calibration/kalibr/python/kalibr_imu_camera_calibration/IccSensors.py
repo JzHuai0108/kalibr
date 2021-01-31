@@ -398,68 +398,70 @@ class IccCamera():
         print "\r  Added {0} camera error terms                      ".format( len(self.targetObservations) )           
         self.allReprojectionErrors = allReprojectionErrors
 
-    def getCornersImageSample(self, poseSplineDv, T_cN_b, timeOffsetPadding=0.0):     
-        obs = self.targetObservations[0]
-        imageCornerPoints =  np.array( obs.getCornersImageFrame() ).T #2xN
+    def getCornersImageSample(self, poseSplineDv, T_cN_b, timeOffsetPadding = 0.0, frameIndex = 0):
+        """
+        return a NX6 array with each row corresponding to an observed landmark.
+        The 6 columns in a row corresponds to predicted measurement, reprojected measurement, observed measurement.
+        Though obtained by two approaches, the predicted measurement is literally the same as the reprojected measurement.
+        """
+        obs = self.targetObservations[frameIndex]
+        imageCornerPoints =  np.array( obs.getCornersImageFrame()) # Nx2
         
         # Build a transformation expression for the time.
         frameTime = self.cameraTimeToImuTimeDv.toExpression() + obs.time().toSec() + self.timeshiftCamToImuPrior
         frameTimeScalar = frameTime.toScalar()
-        
-        #as we are applying an initial time shift outside the optimization so 
-        #we need to make sure that we dont add data outside the spline definition
+
+        # as we are applying an initial time shift outside the optimization so 
+        # we need to make sure that we dont add data outside the spline definition
         if frameTimeScalar <= poseSplineDv.spline().t_min() or frameTimeScalar >= poseSplineDv.spline().t_max():
             return np.array([])
-            
+
         T_w_b = poseSplineDv.transformationAtTime(frameTime, timeOffsetPadding, timeOffsetPadding)
         T_b_w = T_w_b.inverse()
-
-        #calibration target coords to camera N coords
-        #T_b_w: from world to imu coords
-        #T_cN_b: from imu to camera N coords
+        # calibration target coords to camera N coords
+        # T_b_w: from world to imu coords
+        # T_cN_b: from imu to camera N coords
         T_c_w = T_cN_b  * T_b_w
-        
-        print "T_c_w\n", sm.Transformation(T_c_w.toTransformationMatrix()).T(), '\nand time %.9f' % frameTimeScalar
-        print "T_w_c\n", sm.Transformation(T_c_w.toTransformationMatrix()).inverse().T(), '\nand time %.9f' % frameTimeScalar
-        targetCornerPoints = np.array( obs.getCornersTargetFrame() ).T #3xN
-        #setup an aslam frame (handles the distortion)
+
+        # 1. Naive approach to reproject landmarks with double numbers.
         frame = self.camera.frameType()
         frame.setGeometry(self.camera.geometry)
-            
-        #corner uncertainty
         R = np.eye(2) * self.cornerUncertainty * self.cornerUncertainty
         invR = np.linalg.inv(R)
-            
-        for pidx in range(0,imageCornerPoints.shape[1]):
-            #add all image points
+        for pidx in range(0,imageCornerPoints.shape[0]):
             k = self.camera.keypointType()
-            k.setMeasurement( imageCornerPoints[:,pidx] )
+            k.setMeasurement(imageCornerPoints[pidx, :])
             k.setInverseMeasurementCovariance(invR)
             frame.addKeypoint(k)
 
         predictedMeasurements = list()
         error_t = self.camera.reprojectionErrorType
-        for pidx in range(0,imageCornerPoints.shape[1]):
-            #add all target points
-            targetPoint = np.insert( targetCornerPoints.transpose()[pidx], 3, 1)
-            p = T_c_w *  aopt.HomogeneousExpression( targetPoint )
-             
-            #build and append the error term
+        targetCornerPoints = np.array(obs.getCornersTargetFrame()) # NX3
+        for pidx in range(0,imageCornerPoints.shape[0]):
+            targetPoint = np.insert(targetCornerPoints[pidx], 3, 1)
+            p = T_c_w *  aopt.HomogeneousExpression(targetPoint)
             rerr = error_t(frame, pidx, p)
-            predictedMeas = imageCornerPoints[:,pidx] - rerr.error() #doing so is because getPredictedMeasurement is 
-            # not exported for this type of reprojectionError. Interestingly, the reprojectionError in kalibr_calibrate_cameras
-            # can getPredictedMeasurement which is exported. The reason behind this differentiation I believe is
-            #imu_camera_calibration used a templated camera reprojectionError scheme manifested by error_t
+            rerr.evaluateError()
+            predictedMeas = imageCornerPoints[pidx, :].T - rerr.error()
+            # We have to subtract error to get the prediction because getPredictedMeasurement is not exposed 
+            # for this type of reprojectionError, e.g., SimpleReprojectionError. 
+            # Interestingly, the reprojectionError in kalibr_calibrate_cameras can call its exposed
+            # getPredictedMeasurement. The reason behind this nuance I believe is that
+            # imu_camera_calibration used a templated camera reprojectionError scheme represented by error_t.
             predictedMeasurements.append(predictedMeas)
-        predMeasArray= np.array(predictedMeasurements)
-        print "predmeasarray shape ", predMeasArray.shape, "imageCornerPoints shape", imageCornerPoints.shape
-        imageCornerProjected =  np.array( obs.getCornerReprojection(self.camera.geometry)).T #2xN
-        return np.concatenate(( predMeasArray.T, imageCornerProjected, imageCornerPoints), axis=0)
+        predictedMeasArray= np.array(predictedMeasurements) # NX2
 
+        # 2. Simple approach to reproject landmarks with float numbers.
+        obs.set_T_t_c(sm.Transformation(T_c_w.toTransformationMatrix()).inverse())
+        imageCornerProjected =  np.array(obs.getCornerReprojection(self.camera.geometry)) # Nx2
+        return np.concatenate((predictedMeasArray, imageCornerProjected, imageCornerPoints), axis=1)
 
-    def getCornersTargetSample(self):     
-        obs = self.targetObservations[0]
-        return np.array( obs.getCornersTargetFrame() ).T #targetCornerPoints
+    def getCornersTargetSample(self, frameIndex):
+        """
+        return Nx3 target landmark coordinates.
+        """
+        obs = self.targetObservations[frameIndex]
+        return np.array(obs.getCornersTargetFrame())
 
 
 #pair of cameras with overlapping field of view (perfectly synced cams required!!)
@@ -608,15 +610,14 @@ class IccCameraChain():
             #add the error terms
             cam.addCameraErrorTerms( problem, poseSplineDv, T_cN_b, blakeZissermanDf, timeOffsetPadding )
 
-    def getCornersImageSample(self, poseSplineDv, timeOffsetPadding=0.0):
-        camNr = 0
-        T_chain = self.camList[camNr].T_c_b_Dv.toExpression()
-        #from imu coords to camerea N coords (as DVs)
-        T_cN_b = T_chain         
-	return self.camList[camNr].getCornersImageSample(poseSplineDv, T_cN_b, timeOffsetPadding) 
+    def getCornersImageSample(self, poseSplineDv, timeOffsetPadding = 0.0,
+                              cameraIndex = 0, frameIndex = 0):
+        T_cN_b = self.camList[cameraIndex].T_c_b_Dv.toExpression()
+        return self.camList[cameraIndex].getCornersImageSample(
+                poseSplineDv, T_cN_b, timeOffsetPadding, frameIndex) 
 
-    def getCornersTargetSample(self, camNr):    
-        return self.camList[camNr].getCornersTargetSample()
+    def getCornersTargetSample(self, cameraIndex, frameIndex):    
+        return self.camList[cameraIndex].getCornersTargetSample(frameIndex)
 
 
 #IMU

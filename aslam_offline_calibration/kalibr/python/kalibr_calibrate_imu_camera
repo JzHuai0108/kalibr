@@ -231,7 +231,11 @@ def main():
     util.generateReport(iCal, filename=reportFile, showOnScreen=not parsed.dontShowReport)
     print "  Report written to {0}".format(reportFile)
     print
-    
+
+    print "Saving fitted B splines..."
+    BSplineIO.saveBspline(iCal, bagtag)
+    print "B splines model written to files with tag {}".format(bagtag)
+
 if __name__ == "__main__":
     main()
 #     try:

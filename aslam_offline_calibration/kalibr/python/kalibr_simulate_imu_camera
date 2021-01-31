@@ -1,13 +1,13 @@
 #!/usr/bin/env python
-print "importing libraries"
-import sm
-import kalibr_common as kc
-from kalibr_imu_camera_calibration import *
 
-import numpy as np
 import argparse
 import signal
-import sys   
+import sys
+import numpy as np
+
+import sm
+import kalibr_common as kc
+from kalibr_imu_camera_calibration import Simulator
 
 # make numpy print prettier
 np.set_printoptions(suppress=True)
@@ -51,7 +51,7 @@ def parseArgs():
     
     %(prog)s --cam camchain.yaml --target aprilgrid.yaml --time-calibration
     
-    camchain.yaml: is the camera-system calibration output of the multiple-camera
+    camchain.yaml: like the camera-system calibration output of the multiple-camera
                    calibratin tool (kalibr_calibrate_cameras)
     
     example aprilgrid.yaml:       |  example imu.yaml: (ADIS16448)
@@ -63,18 +63,14 @@ def parseArgs():
 
     #setup the argument list
     parser = KalibrArgParser(description='Simulate rolling shutter camera measurements and inertial readings.', usage=usage)
-        
+
     #configuration files
     groupCam = parser.add_argument_group('Camera system configuration')
-    groupCam.add_argument('--cams', dest='chain_yaml', help='Camera system configuration as yaml file', required=True, action=Once)
-    groupCam.add_argument('--recompute-camera-chain-extrinsics',  action='store_true', dest='recompute_chain_extrinsics', \
-                          help='Recompute the camera chain extrinsics. This option is exclusively recommended for debugging purposes in order to identify problems with the camera chain extrinsics.')
+    groupCam.add_argument('--cam', dest='chain_yaml', help='Camera system configuration as yaml file', required=True, action=Once)
     groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma', help='Standard deviation of the distribution of reprojected corner points [px]. (default: %(default)s)', required=False)
     
     groupImu = parser.add_argument_group('IMU configuration')
     groupImu.add_argument('--imu', dest='imu_yamls', nargs='+', help='Yaml files holding the IMU noise parameters. The first IMU will be the reference IMU.', required=False, action=Once)
-    groupImu.add_argument('--imu-delay-by-correlation', action='store_true', dest='estimate_imu_delay', \
-                          help='Estimate the delay between multiple IMUs by correlation. By default, no temporal calibration between IMUs will be performed.', required=False)      
     groupImu.add_argument('--imu-models', nargs='+', dest='imu_models', help='The IMU models to estimate. Currently supported are \'calibrated\', \'scale-misalignment\' and \'scale-misalignment-size-effect\'.', action=Once)
     
     groupTarget = parser.add_argument_group('Calibration target')
@@ -87,11 +83,6 @@ def parseArgs():
     groupSim.add_argument('--time-readout', type=float, default=30e-3, dest='time_readout', help='Read out time of a full frame [s] (default: %(default)s)', required=False)
     groupSim.add_argument('--frame-rate', type=int, default=30, dest='camera_frame_rate', help='Frame rate of the camera [1] (default: %(default)s)', required=False)
     
-    #Result options
-    outputSettings = parser.add_argument_group('Output options')    
-    outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Verbose output (disables plots)')
-    outputSettings.add_argument('--dont-show-report', action='store_true', dest='dontShowReport', help='Do not show the report on screen after calibration.')    
-     
     #print help if no argument is specified
     if len(sys.argv)==1:
         parser.print_help()
@@ -101,30 +92,24 @@ def parseArgs():
     try:
         parsed = parser.parse_args()
     except:
-        sys.exit(2)                 
-   
-    #there is a with the gtk plot widget, so we cant plot if we have opencv windows open...
-    #--> disable the plots in these special situations
-    if parsed.verbose:
-        parsed.dontShowReport = True
-    
+        sys.exit(2)
     return parsed
 
 def main():
     # Parse the arguments
-    parsed = parseArgs();
+    parsed = parseArgs()
     modelFile = parsed.model_txt
     targetFile = parsed.target_yaml
     camChainYaml = parsed.chain_yaml
     
-    print "  Test loading the model and generate sample data "    
-    simulator = util.RsVisualInertialMeasViaBsplineSimulator(modelFile, targetFile, camChainYaml,\
+    print("Loading the B splines...")   
+    simulator = Simulator.RsVisualInertialMeasViaBsplineSimulator(modelFile, targetFile, camChainYaml,\
        parsed.time_offset, parsed.time_readout)
-    #simulator.simulateOneFrame()
+    simulator.checkNaiveVsNewtonRsProjection()
     pathStub = ''
     if modelFile.find('/') != -1:
-        pathStub = modelFile.rsplit('/', 1)[0]   
-        
+        pathStub = modelFile.rsplit('/', 1)[0]
+
     refLandmarkFile = pathStub + "/initial_landmarks_td" + str(parsed.time_offset).replace('.','',1) + '.txt'
     simulator.simulate(refLandmarkFile, parsed.reprojection_sigma)    
 
