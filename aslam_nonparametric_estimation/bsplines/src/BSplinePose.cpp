@@ -444,12 +444,4 @@ namespace bsplines {
     {
       return rotation_;
     }
-    void BSplinePose::savePoseSplineToFile(std::string knotCoeffFile)
-    {
-      saveSplineToFile(knotCoeffFile);
-    }
-    bool BSplinePose::initPoseSplineFromFile(std::string knotCoeffFile)
-    {
-      return initSplineFromFile(knotCoeffFile);
-    }
   } // namespace bsplines

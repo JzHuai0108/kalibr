@@ -96,12 +96,6 @@ def saveBsplineRefImuMeas(cself, filename):
     np.savetxt(filename,whole, fmt=['%.9f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f'])
 
 
-def saveBsplineModel(cself, filename):    
-    poseSpline = cself.poseDv.spline()
-    poseSpline.savePoseSplineToFile(filename)   
-    print("  saved B spline model of order {} to {}".format(poseSpline.splineOrder(), filename))
-
-
 def saveBspline(cself, bagtag):
     idx = 0
     imu = cself.ImuList[idx]    
@@ -134,29 +128,53 @@ def saveBspline(cself, bagtag):
     # refImuFile = "bspline_imu_meas.txt"
     # saveBsplineRefImuMeas(cself, refImuFile)
   
-    modelFile = "bspline_knot_coeff.txt" 
-    saveBsplineModel(cself, modelFile)
+    # check landmarks observed in an image.
+    # cameraIndex = 0
+    # frameIndex = 0
+    # imageCornerPoints = cself.CameraChain.getCornersImageSample(poseSplineDv, 0.0, cameraIndex, frameIndex)
+    # targetCornerPoints = cself.CameraChain.getCornersTargetSample(cameraIndex, frameIndex)
+    # sampleImageCorners = "bspline_image_corners_{}_{}.txt".format(cameraIndex, frameIndex)
+    # sampleTargetCorners = "landmarks_{}_{}.txt".format(cameraIndex, frameIndex)
+    # np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
+    # np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
 
-    cameraIndex = 0
-    frameIndex = 0
-    imageCornerPoints = cself.CameraChain.getCornersImageSample(poseSplineDv, 0.0, cameraIndex, frameIndex)
-    targetCornerPoints = cself.CameraChain.getCornersTargetSample(cameraIndex, frameIndex)
-    sampleImageCorners = "bspline_image_corners_{}_{}.txt".format(cameraIndex, frameIndex)
-    sampleTargetCorners = "bspline_target_corners_{}_{}.txt".format(cameraIndex, frameIndex)
-    np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
-    np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
+    poseFile = "bspline_pose.txt"
+    poseSpline = cself.poseDv.spline()
+    poseSpline.saveSplineToFile(poseFile)   
+    print("  saved pose B splines of order {} to {}".format(poseSpline.splineOrder(), poseFile))
 
+    imu = cself.ImuList[0]
+    gyroBias = imu.gyroBiasDv.spline()   
+    accBias = imu.accelBiasDv.spline()
+    print '\t\t\tstart time\t\tfinish time'
+    print 'poseSpline\t%.9f\t%.9f' % (poseSpline.t_min(), poseSpline.t_max())
+    print 'gyroBias\t%.9f\t%.9f' % (gyroBias.t_min(), gyroBias.t_max())
+    print 'accBias\t\t%.9f\t%.9f' % (accBias.t_min(), accBias.t_max())
+    print 'imu.timeOffset\t%.9f' % imu.timeOffset
+
+    gyroBiasFile = "bspline_gyro_bias.txt"
+    gyroBias.saveSplineToFile(gyroBiasFile)
+    print("  saved gyro bias B splines of order {} to {}".format(gyroBias.splineOrder(), gyroBiasFile))
+
+    accBiasFile = "bspline_acc_bias.txt"
+    accBias.saveSplineToFile(accBiasFile)    
+    print("  saved acc bias B splines of order {} to {}".format(accBias.splineOrder(), accBiasFile))
+
+    landmarks = cself.CameraChain.camList[0].detector.target().points()
+    landmarkFile = "landmarks.txt"
+    with open(landmarkFile, 'w') as stream:
+        for row in landmarks:
+            stream.write("{}, {}, {}\n".format(row[0], row[1], row[2]))
 
 def loadArrayWithHeader(arrayFile):
     with open(arrayFile) as f:
         lines = (line for line in f if not (line.startswith('#') or line.startswith('%')))        
         return np.loadtxt(lines, delimiter=' ', skiprows=0)
 
-
 def loadBsplineModel(knotCoeffFile):
     splineOrder = 6
     poseSpline = bsplines.BSplinePose(splineOrder, sm.RotationVector() )
-    poseSpline.initPoseSplineFromFile(knotCoeffFile)
+    poseSpline.initSplineFromFile(knotCoeffFile)
     print("Initialized a pose spline with {} knots and coefficients {}.".format( \
             poseSpline.knots().size, poseSpline.coefficients().shape))
     poseDv = asp.BSplinePoseDesignVariable( poseSpline )

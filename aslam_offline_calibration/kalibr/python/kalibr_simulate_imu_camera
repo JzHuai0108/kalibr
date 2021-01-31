@@ -51,7 +51,7 @@ def parseArgs():
     
     %(prog)s --cam camchain.yaml --target aprilgrid.yaml --time-calibration
     
-    camchain.yaml: like the camera-system calibration output of the multiple-camera
+    camchain.yaml: like the camera-IMU system calibration output of the camera-imu
                    calibratin tool (kalibr_calibrate_cameras)
     
     example aprilgrid.yaml:       |  example imu.yaml: (ADIS16448)
@@ -66,7 +66,7 @@ def parseArgs():
 
     #configuration files
     groupCam = parser.add_argument_group('Camera system configuration')
-    groupCam.add_argument('--cam', dest='chain_yaml', help='Camera system configuration as yaml file', required=True, action=Once)
+    groupCam.add_argument('--cam', dest='chain_yaml', help='Camera-IMU system configuration as yaml file', required=True, action=Once)
     groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma', help='Standard deviation of the distribution of reprojected corner points [px]. (default: %(default)s)', required=False)
     
     groupImu = parser.add_argument_group('IMU configuration')
@@ -105,7 +105,7 @@ def main():
     print("Loading the B splines...")   
     simulator = Simulator.RsVisualInertialMeasViaBsplineSimulator(modelFile, targetFile, camChainYaml,\
        parsed.time_offset, parsed.time_readout)
-    simulator.checkNaiveVsNewtonRsProjection()
+    # simulator.checkNaiveVsNewtonRsProjection()
     pathStub = ''
     if modelFile.find('/') != -1:
         pathStub = modelFile.rsplit('/', 1)[0]

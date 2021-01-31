@@ -118,6 +118,8 @@ void import_bspline_python()
     .def("curveQuadraticIntegralSparse", &BSpline::curveQuadraticIntegralSparse, "")
     .def("curveQuadraticIntegralDiagSparse", &BSpline::curveQuadraticIntegralDiagSparse, "")
     .def("coefficientVectorLength", &BSpline::coefficientVectorLength, "")
+    .def("saveSplineToFile", &BSpline::saveSplineToFile)
+    .def("initSplineFromFile", &BSpline::initSplineFromFile)
     .def("initConstantSpline", &BSpline::initConstantSpline, "initConstantSpline(double t_min, double t_max, int numSegments, const Eigen::VectorXd & constant")
     .def("numVvCoefficients", &BSpline::numVvCoefficients, "numVvCoefficients()");
 
