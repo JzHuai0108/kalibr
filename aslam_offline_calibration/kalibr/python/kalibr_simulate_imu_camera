@@ -42,8 +42,8 @@ def parseArgs():
                 formatter.add_arguments(action_group._group_actions)
                 formatter.end_section()
             formatter.add_text(self.epilog)
-            return formatter.format_help()     
-        
+            return formatter.format_help()
+
     usage = """
     Example usage to generate the visual inertial system states at specific epochs and
      observations of a calibration target with a rolling shutter camera model and
@@ -59,35 +59,44 @@ def parseArgs():
         tagCols: 6                |      accelerometer_random_walk: 0.0002
         tagRows: 6                |      gyroscope_noise_density: 0.0004
         tagSize: 0.088            |      gyroscope_random_walk: 4.0e-06
-        tagSpacing: 0.3           |      update_rate: 200.0"""    
+        tagSpacing: 0.3           |      update_rate: 200.0"""
 
     #setup the argument list
     parser = KalibrArgParser(description='Simulate rolling shutter camera measurements and inertial readings.', usage=usage)
 
+    #simulation options
+    groupSim = parser.add_argument_group('Simulation options')
+    groupSim.add_argument('pose_file', help='The file of the knot coefficients of the pose B spline')
+    groupSim.add_argument('--gyro-bias-file', dest='gyro_bias_file', \
+            help=('The file of the knot coefficients of the gyro bias B spline.'
+                  ' If not specified, it will be deduced from the pose_file!'))
+    groupSim.add_argument('--acc-bias-file', dest='acc_bias_file', \
+            help=('The file of the knot coefficients of the accelerometer bias B spline.'
+                  ' If not specified, it will be deduced from the pose_file!'))
+    groupSim.add_argument('--output_dir', help='Where to put output files?')
+
     #configuration files
     groupCam = parser.add_argument_group('Camera system configuration')
     groupCam.add_argument('--cam', dest='chain_yaml', help='Camera-IMU system configuration as yaml file', required=True, action=Once)
-    groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma', help='Standard deviation of the distribution of reprojected corner points [px]. (default: %(default)s)', required=False)
-    
+    groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma', \
+            help='Standard deviation of the distribution of reprojected corner points [px]. (default: %(default)s)')
+
     groupImu = parser.add_argument_group('IMU configuration')
-    groupImu.add_argument('--imu', dest='imu_yamls', nargs='+', help='Yaml files holding the IMU noise parameters. The first IMU will be the reference IMU.', required=False, action=Once)
-    groupImu.add_argument('--imu-models', nargs='+', dest='imu_models', help='The IMU models to estimate. Currently supported are \'calibrated\', \'scale-misalignment\' and \'scale-misalignment-size-effect\'.', action=Once)
-    
+    groupImu.add_argument('--imu', dest='imu_yaml', help=('Yaml holding the IMU noise parameters.'
+            ' Thanks to the ConfigReader, no hierarchy should be used in the yaml.'))
+    groupImu.add_argument('--imu-model', dest='imu_model', help= \
+            ('The IMU models to estimate. Currently supported are \'calibrated\','
+             ' \'scale-misalignment\' and \'scale-misalignment-size-effect\'.'))
+
     groupTarget = parser.add_argument_group('Calibration target')
-    groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file', required=True, action=Once)
-    
-    #simulation options
-    groupSim = parser.add_argument_group('Simulation options')
-    groupCam.add_argument('--model-file', dest='model_txt', help='The B spline knot coefficients of the sample motion as a txt file, e.g., knotCoeffT.txt', required=True, action=Once)
-    groupSim.add_argument('--time-offset', type=float, default=0.0, dest='time_offset', help='Time offset between camera and inertial measurements, raw timestamp of frame i + time offset = time of frame i in imu clock [s] (default: %(default)s)', required=False)
-    groupSim.add_argument('--time-readout', type=float, default=30e-3, dest='time_readout', help='Read out time of a full frame [s] (default: %(default)s)', required=False)
-    groupSim.add_argument('--frame-rate', type=int, default=30, dest='camera_frame_rate', help='Frame rate of the camera [1] (default: %(default)s)', required=False)
-    
+    groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file',
+                             required=True, action=Once)
+
     #print help if no argument is specified
     if len(sys.argv)==1:
         parser.print_help()
         sys.exit(2)
-    
+
     #Parser the argument list
     try:
         parsed = parser.parse_args()
@@ -98,20 +107,20 @@ def parseArgs():
 def main():
     # Parse the arguments
     parsed = parseArgs()
-    modelFile = parsed.model_txt
-    targetFile = parsed.target_yaml
-    camChainYaml = parsed.chain_yaml
-    
-    print("Loading the B splines...")   
-    simulator = Simulator.RsVisualInertialMeasViaBsplineSimulator(modelFile, targetFile, camChainYaml,\
-       parsed.time_offset, parsed.time_readout)
+    if not parsed.gyro_bias_file:
+        parsed.gyro_bias_file = parsed.pose_file.replace('pose', 'gyro_bias', 1)
+    if not parsed.acc_bias_file:
+        parsed.acc_bias_file = parsed.pose_file.replace('pose', 'acc_bias', 1)
+
+    if  parsed.imu_yaml and not parsed.imu_model:
+        #Maintain backwards compatibility with previous interface.
+        parsed.imu_model = 'calibrated'
+
+    print("Loading B splines...")
+    simulator = Simulator.RsVisualInertialMeasViaBSplineSimulator(parsed)
     # simulator.checkNaiveVsNewtonRsProjection()
-    pathStub = ''
-    if modelFile.find('/') != -1:
-        pathStub = modelFile.rsplit('/', 1)[0]
 
-    refLandmarkFile = pathStub + "/initial_landmarks_td" + str(parsed.time_offset).replace('.','',1) + '.txt'
-    simulator.simulate(refLandmarkFile, parsed.reprojection_sigma)    
+    simulator.simulate(parsed.output_dir)
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     main()

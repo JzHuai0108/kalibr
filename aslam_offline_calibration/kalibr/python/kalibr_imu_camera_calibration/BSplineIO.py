@@ -9,64 +9,78 @@ import bsplines
 import sm
 
 
-def saveBsplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
-    
+def saveBSplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
     timeOffsetPadding = 0.0  
-    for timeScalar in times:    
-        dv = aopt.Scalar(timeScalar)
+    for time in times:    
+        dv = aopt.Scalar(time)
         timeExpression = dv.toExpression()
         
-        if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
+        if time <= poseSplineDv.spline().t_min() or time >= poseSplineDv.spline().t_max():
             print >> sys.stdout, "Warn: time out of range "
             continue       
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
         sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c
         # quatInv used here to convert kalibr's JPL quaternion to Halmilton quaternion
-        print >> stream, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str, sm.quatInv(sm_T_w_c.q())))
+        print >> stream, '%.9f' % time, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str, sm.quatInv(sm_T_w_c.q())))
 
 
-def saveBsplineRefStates(times, poseSplineDv, cself, stream=sys.stdout, T_b_c=sm.Transformation()):
-    '''save the system states at the camera reference times in a customized format. system states are (T_w_b(txyz, qxyzw), v_w, bg, ba)'''
-    
-    stream.write('%Each line contains the state at a frame\'s reference time: all in metric units unless specified otherwise\n')
-    stream.write('%frame id, frame id in source, timestamp, T_WB[xyz, qxyzw], v_W, bg, ba, isKeyFrame[0 or 1]\n')
+def sampleBSplines(stateTimes, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset):
+    """
+    return:
+        1. frameIds.
+        2. saved stamps, saved stamp + time offset = state stamp.
+        3. states, each state T_WB[xyz, qxyzw], v_W, bg, ba.
+    """
+    states = np.zeros((len(stateTimes),16))
+    measuredTimes = np.zeros(len(stateTimes))
+    frameIds = np.zeros(len(stateTimes), dtype=np.int32)
 
-    idx = 0
-    imu = cself.ImuList[idx]    
-   
-    gyroBias = imu.gyroBiasDv.spline()   
-    accBias = imu.accelBiasDv.spline()
-
-    print '\t\t\tstart time\t\tfinish time'
-    print 'poseSpline\t%.9f\t%.9f' % (poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max())
-    print 'gyroBias\t%.9f\t%.9f' % (gyroBias.t_min(), gyroBias.t_max())
-    print 'accBias\t\t%.9f\t%.9f' % (accBias.t_min(), accBias.t_max())
-    print 'imu.timeOffset\t%.9f' % imu.timeOffset
+    tmin = max(poseSplineDv.spline().t_min(), gyroBiasSpline.t_min(), accBiasSpline.t_min())
+    tmax = min(poseSplineDv.spline().t_max(), gyroBiasSpline.t_max(), accBiasSpline.t_max())
 
     timeOffsetPadding = 0.0
-    frameId = 0  
-    for timeScalar in times:    
-        dv = aopt.Scalar(timeScalar)
-        timeExpression = dv.toExpression()        
-        if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max() or \
-           timeScalar <= gyroBias.t_min() or timeScalar >= gyroBias.t_max() or \
-           timeScalar <= accBias.t_min() or timeScalar >= accBias.t_max():
-            print "Warn: time out of range in generating ref states"
+    frameId = 0
+    for time in stateTimes:
+        if time <= tmin or time >= tmax:
+            print "Warn: time out of range in generating a state"
             continue
+        dv = aopt.Scalar(time)
+        timeExpression = dv.toExpression()  
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
         sm_T_w_b = sm.Transformation(T_w_b.toTransformationMatrix())
-        v_w = poseSplineDv.linearVelocity(timeScalar).toEuclidean()
-        
-        gyro_bias = gyroBias.evalD(timeScalar,0)   
-        acc_bias = accBias.evalD(timeScalar,0)
-        # quatInv used here to convert kalibr's JPL quaternion to Halmilton quaternion
-        print >> stream, frameId, frameId, '%.9f' % timeScalar, ' '.join(map(str,sm_T_w_b.t())), \
-        ' '.join(map(str, sm.quatInv(sm_T_w_b.q()))), ' '.join(map(str,v_w)), \
-        ' '.join(map(str, gyro_bias)), ' '.join(map(str, acc_bias)), 1
+        v_w = poseSplineDv.linearVelocity(time).toEuclidean()
+        gyro_bias = gyroBiasSpline.eval(time)
+        acc_bias = accBiasSpline.eval(time)
+        frameIds[frameId] = frameId
+        measuredTimes[frameId] = time - timeOffset
+        states[frameId, 0:3] = sm_T_w_b.t()
+        # quatInv converts JPL quaternion to Halmilton quaternion (x,y,z,w).
+        states[frameId, 3:7] = sm.quatInv(sm_T_w_b.q())
+        states[frameId, 7:10] = v_w
+        states[frameId, 10:13] = acc_bias
+        states[frameId, 13:16] = gyro_bias
         frameId += 1
+    return frameIds, measuredTimes, states
 
 
-def saveBsplineRefImuMeas(cself, filename):
+def toNanosecondString(time):
+    return "{}{:09d}".format(int(time), int((time-int(time)) * 1e9))
+
+
+def saveStates(times, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset = 0, stream = sys.stdout):
+    '''save the system states at times.'''
+    stream.write('vertex index, timestamp [ns], position x [m], position y [m], position z [m], '
+                 'quaternion x, quaternion y, quaternion z, quaternion w, velocity x [m/s], '
+                 'velocity y [m/s], velocity z [m/s], acc bias x [m/s^2], acc bias y [m/s^2], '
+                 'acc bias z [m/s^2], gyro bias x [rad/s], gyro bias y [rad/s], gyro bias z [rad/s]\n')
+    frameIds, measuredTimes, states = sampleBSplines( \
+            times, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset)
+    for index, row in enumerate(states):
+        msg = ', '.join(map(str, row))
+        stream.write("{:d}, {}, {}\n".format(frameIds[index], toNanosecondString(measuredTimes[index]), msg))
+
+
+def saveBSplineRefImuMeas(cself, filename):
     print >> sys.stdout, "  Saving IMU measurements generated from B-spline (time wxyz, axyz bg, ba in metric units) to", filename
 
     idx = 0
@@ -96,7 +110,7 @@ def saveBsplineRefImuMeas(cself, filename):
     np.savetxt(filename,whole, fmt=['%.9f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f'])
 
 
-def saveBspline(cself, bagtag):
+def saveBSpline(cself, bagtag):
     idx = 0
     imu = cself.ImuList[idx]    
     poseSplineDv = cself.poseDv
@@ -107,7 +121,7 @@ def saveBspline(cself, bagtag):
 
     # refPoseStream = open("bspline_poses.txt", 'w')
     # print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"  
-    # saveBsplineRefPose(imuTimes, poseSplineDv, stream=refPoseStream)
+    # saveBSplineRefPose(imuTimes, poseSplineDv, stream=refPoseStream)
     # refPoseStream.close()
 
     # timeList = list()
@@ -121,12 +135,15 @@ def saveBspline(cself, bagtag):
 
     # refStateFile = "bspline_states.txt"
     # refStateStream = open(refStateFile, 'w')
-    # print >> sys.stdout, "  Saving system states at camera rate generated from B-spline to", refStateFile   
-    # saveBsplineRefStates(refStateTimes, poseSplineDv, cself, refStateStream)
+    # print >> sys.stdout, "  Saving system states at camera rate generated from B-spline to", refStateFile
+    # imu = cself.ImuList[0]
+    # gyroBias = imu.gyroBiasDv.spline()
+    # accBias = imu.accelBiasDv.spline()
+    # saveStates(refStateTimes, poseSplineDv, gyroBias, accBias, 0.0, refStateStream)
     # refStateStream.close()
 
     # refImuFile = "bspline_imu_meas.txt"
-    # saveBsplineRefImuMeas(cself, refImuFile)
+    # saveBSplineRefImuMeas(cself, refImuFile)
   
     # check landmarks observed in an image.
     # cameraIndex = 0
@@ -161,21 +178,43 @@ def saveBspline(cself, bagtag):
     print("  saved acc bias B splines of order {} to {}".format(accBias.splineOrder(), accBiasFile))
 
     landmarks = cself.CameraChain.camList[0].detector.target().points()
-    landmarkFile = "landmarks.txt"
-    with open(landmarkFile, 'w') as stream:
-        for row in landmarks:
-            stream.write("{}, {}, {}\n".format(row[0], row[1], row[2]))
+    landmarkCsv = "landmarks.csv"
+    with open(landmarkCsv, 'w') as stream:
+        header = ', '.join(["landmark index", "landmark position x [m]",
+                            "landmark position y [m]", "landmark position z [m]"])
+        stream.write('{}\n'.format(header))
+        for index, row in enumerate(landmarks):
+            stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
 
 def loadArrayWithHeader(arrayFile):
     with open(arrayFile) as f:
         lines = (line for line in f if not (line.startswith('#') or line.startswith('%')))        
         return np.loadtxt(lines, delimiter=' ', skiprows=0)
 
-def loadBsplineModel(knotCoeffFile):
-    splineOrder = 6
-    poseSpline = bsplines.BSplinePose(splineOrder, sm.RotationVector() )
+def getSplineOrder(knotCoeffFile):
+    with open(knotCoeffFile, 'r') as stream:
+        lineNumber = 0
+        for line in stream:
+            if lineNumber == 2:
+                return int(line.split()[0])
+            lineNumber += 1
+
+def loadPoseBSpline(knotCoeffFile):
+    splineOrder = getSplineOrder(knotCoeffFile)
+    poseSpline = bsplines.BSplinePose(splineOrder, sm.RotationVector())
     poseSpline.initSplineFromFile(knotCoeffFile)
     print("Initialized a pose spline with {} knots and coefficients {}.".format( \
             poseSpline.knots().size, poseSpline.coefficients().shape))
-    poseDv = asp.BSplinePoseDesignVariable( poseSpline )
+    poseDv = asp.BSplinePoseDesignVariable(poseSpline)
     return poseDv
+
+def loadBSpline(knotCoeffFile):
+    splineOrder = getSplineOrder(knotCoeffFile)
+    spline = bsplines.BSpline(splineOrder)
+    spline.initSplineFromFile(knotCoeffFile)
+    print("Initialized a Euclidean spline with {} knots and coefficients {}.".format( \
+            spline.knots().size, spline.coefficients().shape))
+    return asp.EuclideanBSplineDesignVariable(spline)
+
+       
+

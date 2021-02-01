@@ -374,6 +374,45 @@ class CameraParameters(ParametersBase):
         self.checkResolution(resolution)
         self.data["resolution"] = resolution
     
+    def checkLineDelay(self, lineDelay):
+        if not isinstance(lineDelay, int) or lineDelay < 0:
+            self.raiseError("line delay should be an integer in nanoseconds and no less than 0.")
+
+    @catch_keyerror
+    def getLineDelayNanos(self):
+        self.checkLineDelay(self.data["line_delay_nanoseconds"])
+        return self.data["line_delay_nanoseconds"]
+    
+    def setLineDelayNanos(self, lineDelay):
+        self.checkLineDelay(lineDelay)
+        self.data["line_delay_nanoseconds"] = lineDelay
+
+    def checkImageNoise(self, imageNoise):
+        if not isinstance(imageNoise, float) or imageNoise < 0.0:
+            self.raiseError("invalid image noise")
+
+    @catch_keyerror
+    def getImageNoise(self):
+        self.checkImageNoise(self.data["image_noise_std_dev"])
+        return self.data["image_noise_std_dev"] 
+
+    def setImageNoise(self, imageNoise):
+        self.checkImageNoise(imageNoise)
+        self.data["image_noise_std_dev"] = imageNoise
+
+    def checkUpdateRate(self, update_rate):
+        if update_rate <= 0.0:
+            self.raiseError("invalid update_rate")
+    
+    @catch_keyerror
+    def getUpdateRate(self):
+        self.checkUpdateRate(self.data["update_rate"])       
+        return self.data["update_rate"]
+    
+    def setUpdateRate(self, update_rate):
+        self.checkUpdateRate(update_rate)
+        self.data["update_rate"] = update_rate
+
     ###################################################
     # Helpers
     ###################################################
@@ -456,6 +495,41 @@ class ImuParameters(ParametersBase):
         self.checkUpdateRate(update_rate)
         self.data["update_rate"] = update_rate
     
+    def checkBias(self, bias):
+        if len(bias)!=3 or not isinstance(bias[0],float) or \
+                not isinstance(bias[1],float) or not isinstance(bias[2],float):
+            self.raiseError("invalid bias")
+
+    def getInitialGyroBias(self):
+        self.checkBias(self.data["initial_gyro_bias"])
+        return self.data["initial_gyro_bias"]
+
+    def setInitialGyroBias(self, gyroBias):
+        self.checkBias(gyroBias)
+        self.data["initial_gyro_bias"] = gyroBias
+
+    def getInitialAccBias(self):
+        self.checkBias(self.data["initial_accelerometer_bias"])
+        return self.data["initial_accelerometer_bias"]
+
+    def setInitialAccBias(self, accBias):
+        self.checkBias(accBias)
+        self.data["initial_accelerometer_bias"] = accBias
+
+    def checkGravity(self, gravity):
+        if len(gravity)!=3 or not isinstance(gravity[0],float) or \
+                not isinstance(gravity[1],float) or not isinstance(gravity[2],float) or \
+                np.linalg.norm(gravity) < 5.0 or np.linalg.norm(gravity) > 20.0:
+            self.raiseError("invalid gravity")
+
+    def getGravityInTarget(self):
+        self.checkGravity(self.data["gravity_in_target"])
+        return self.data["gravity_in_target"]
+
+    def setGravityInTarget(self, gravityInTarget):
+        self.checkGravity(gravityInTarget)
+        self.data["gravity_in_target"] = gravityInTarget
+
     #accelerometer statistics
     def checkAccelerometerStatistics(self, noise_density, random_walk):
         if noise_density <= 0.0:

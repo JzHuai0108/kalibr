@@ -25,15 +25,17 @@ Don't fuss about it. Simply ignore it and go ahead to build kalibr with catkin_m
 The dataset can be the imu camera calibration sample data provided by Kalibr
 
 ```
-kalibr_calibrate_imu_camera --cam camchain.yaml --target april_6x6.yaml --imu imu_adis16448.yaml --bag dynamic.bag
+kalibr_calibrate_imu_camera --cam camchain.yaml --target april_6x6.yaml --imu imu_adis16448.yaml --bag dynamic.bag \
+  --bag-from-to 5 45 --dont-show-report
+
 ```
-The output results will include the B-spline model, knotCoeffT, and ref_pose, ref_state, ref_imu_meas generated from the model. More details refer to saveBspline in python/kalibr_imu_camera_calibration/IccUtil.py.
+The output results will include the B-spline model, knotCoeffT, and ref_pose, ref_state, ref_imu_meas generated from the model. More details refer to saveBSpline in python/kalibr_imu_camera_calibration/IccUtil.py.
 
 2. Based on the B-spline model, simulate rolling shutter camera measurements
 
 ```
-kalibr_simulate_imu_camera --model-file "knotCoeffT.txt" --time-offset 0.6 --time-readout 0 --frame-rate 30 --target april_6x6.yaml
-
+kalibr_simulate_imu_camera $output_dir/bspline_pose.txt --cam $script_dir/camchain_template.yaml --imu $script_dir/imu_template.yaml \
+  --target $data_dir/april_6x6.yaml --output_dir $output_dir
 ```
 
 # A crash course on design variables
