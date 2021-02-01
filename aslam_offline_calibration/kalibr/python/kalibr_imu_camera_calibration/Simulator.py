@@ -1,3 +1,4 @@
+import copy
 import os
 from random import gauss
 import sys
@@ -19,7 +20,8 @@ def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c):
     timeExpression = dv.toExpression()
 
     if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
-        print "getCamerPose warn: %.9f time out of range [%.9f, %.9f]" % (timeScalar, poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max())
+        print("getCameraPose: {:.9f} time out of range [{:.9f}, {:.9f}]".format( \
+            timeScalar, poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max()))
         return sm.Transformation(), False
 
     T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
@@ -141,7 +143,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             state_time = self.refStateTimes[0]
             line_delay = float(self.cameraConfig.getLineDelayNanos()) * 1e-9
             imageCornersNaive = self.naiveMethodToRsProjection(state_time, line_delay, False)
-            imageCornersNewton, unusedKeypoints, unusedImageOffset = \
+            imageCornersNewton, unusedKeypoints, _ = \
                 self.newtonMethodToRsProjection(state_time, line_delay, 1.0, False)
 
         assert np.allclose(imageCornersNaive[:, :, 0], imageCornersNewton[:, :, 0])
@@ -177,8 +179,6 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
 
         # gravity in target example: np.array([0.0, 9.81, 0.0])
         gravity = self.imuConfig.getGravityInTarget()
-        print('gravity in target {}'.format(gravity))
-        print('gravity 0 in target {}'.format(gravity[0] * 10))
         gravityDv = aopt.EuclideanDirection(np.array(self.imuConfig.getGravityInTarget()).T)
         gravityExpression = gravityDv.toExpression()
 
@@ -254,13 +254,13 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         cameraIndex = 0 # assume only one camera is used.
         cameraTimeOffset = self.timeOffset
         for vertexId, frameTime in enumerate(trueFrameTimes):
-            trueKeypoints, noisyKeypoints, keypointOffsets = \
+            _, noisyKeypoints, keypointOffsets = \
                 self.newtonMethodToRsProjection(frameTime,
                                                 float(self.cameraConfig.getLineDelayNanos()) * 1e-9,
                                                 imageNoise)
             imageCornerOffsetNorms += keypointOffsets
             if vertexId % 300 == 0:
-                print('  Projected {:4d} target landmarks for state at {:.9f}'.format(len(noisyKeypoints), frameTime))
+                print('Projected {:4d} target landmarks for state at {:.9f}'.format(len(noisyKeypoints), frameTime))
             for keypoint in noisyKeypoints:
                 landmark_observations[keypoint[0]].append(
                     (vertexId, keypoint[1], keypoint[2], keypoint[3], keypoint[4]))
@@ -291,11 +291,11 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                         timeString, vertexId, cameraIndex, keypoint[1], keypoint[2], keypoint[3], imageNoise,
                         keypoint[4], -1))
 
-        print('  Written landmark observations to {}'.format(observationCsv))
+        print('Written landmark observations to {}'.format(observationCsv))
         print('  Histogram of the offset in the infinity norm due to line delay and noise')
         counts, newBins, patches = plt.hist(imageCornerOffsetNorms, bins)
         print('  counts:{}\nbins:{}'.format(counts, newBins))        
-        plt.title('Distribution of offset in the infinity norm due to line delay and noise')        
+        plt.title('Distribution of norm of the offsets due to line delay and noise')
         plt.show()
 
     def simulate(self, outputDir):
@@ -343,7 +343,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             sm_T_w_c, isValid = getCameraPoseAt(state_time, self.poseSplineDv, self.T_imu_c0)
             if not isValid:
                 continue
-            lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) #3x1, generated with the GS model
+            lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) # 3x1.
             if lastImagePoint[2, 0] == 0.0:
                 continue
             numIter = 0  
@@ -385,7 +385,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             1. Projected landmarks in image according to a rolling shutter model, NX3X1 array.
             2. Projected landmarks in image plus gaussian noise, a list of tuples,
                 each tuple (landmark index, keypoint index, pt.x, pt.y, keypoint size)
-            3. The inf norm of the offset between the noisy measurement and projected 
+            3. The norm of the offset between the noisy measurement and projected
                 measurement according to a global shutter model.
         """
         imageCornerProjected = list() # image keypoints free of noise effect
@@ -399,11 +399,18 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 format(state_time, self.poseSplineDv.spline().t_min(), self.poseSplineDv.spline().t_max()))
             return np.array([[[]]]), frameKeypoints, list()
 
-        for iota in range(self.targetObservation.getTotalTargetPoint()):
+        numOutOfBound = 0
+        numFailedProjection = 0
+        numLandmarks = self.targetObservation.getTotalTargetPoint()
+        for iota in range(numLandmarks):
             sm_T_w_c, isValid = getCameraPoseAt(state_time, self.poseSplineDv, self.T_imu_c0)
 
-            lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) #3x1, this is GS camera model
-            if not isValid or lastImagePoint[2, 0] == 0.0:
+            lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) # 3x1.
+            if not isValid:
+                numOutOfBound += 1
+                continue
+            if lastImagePoint[2, 0] == 0.0:
+                numFailedProjection += 1
                 continue
             numIter = 0
             aborted = False
@@ -413,13 +420,13 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 imageCornerProjected.append(lastImagePoint)          
                 xnoise = gauss(0.0, reprojectionSigma)
                 ynoise = gauss(0.0, reprojectionSigma)
-                imageCornerProjectedOffset.append(max(np.abs(xnoise), np.abs(ynoise)))
+                imageCornerProjectedOffset.append(np.linalg.norm([xnoise, ynoise]))
                 frameKeypoints.append((iota, kpId, lastImagePoint[0, 0] + xnoise, lastImagePoint[1, 0] + ynoise, 12))
                 kpId += 1
                 continue
             # solve y=g(y) where y is the vertical projection in pixels
-            initialImagePoint = lastImagePoint
-            while numIter < 8:
+            initialImagePoint = copy.deepcopy(lastImagePoint)
+            while numIter < 6:
                 # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
 
                 # compute g(y_0)
@@ -427,7 +434,12 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
 
                 imagePoint0 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
-                if not isValid or imagePoint0[2, 0] == 0.0:
+                if not isValid:
+                    numOutOfBound += 1
+                    aborted = True
+                    break
+                if imagePoint0[2, 0] == 0.0:
+                    numFailedProjection += 1
                     aborted = True
                     break
                 # compute Jacobian of g(y) relative to y at y_0
@@ -436,30 +448,38 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
 
                 imagePoint1 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
-                if not isValid or imagePoint1[2, 0] == 0.0:
+                if not isValid:
+                    numOutOfBound += 1
+                    aborted = True
+                    break
+                if imagePoint0[2, 0] == 0.0:
+                    numFailedProjection += 1
                     aborted = True
                     break
                 jacob = (imagePoint1[1, 0] - imagePoint0[1, 0])/eps
-            
+
                 # compute y_1
                 lastImagePoint[0, 0] = imagePoint0[0, 0]    
                 delta = imagePoint0[1, 0] - lastImagePoint[1, 0]        
                 lastImagePoint[1, 0] = lastImagePoint[1, 0] - (imagePoint0[1, 0] - lastImagePoint[1, 0])/(jacob - 1)
                 numIter += 1
-                if verbose:  
+                if verbose:
                     print('lmId {} iter {} image coords {}'.format(iota, numIter, imagePoint0.T))
                 if np.absolute(delta) < 1e-4:
                     break
 
             if not aborted:
                 # TODO: randomly mask some landmark observations
-                imageCornerProjected.append(imagePoint0)                
+                imageCornerProjected.append(imagePoint0)
                 xnoise = gauss(0.0, reprojectionSigma)
                 ynoise = gauss(0.0, reprojectionSigma)
                 frameKeypoints.append((iota, kpId, imagePoint0[0, 0] + xnoise, imagePoint0[1, 0] + ynoise, 12))
-                imageCornerProjectedOffset.append(max(np.abs(initialImagePoint[0, 0] - imagePoint0[0, 0] - xnoise), \
-                  np.abs(initialImagePoint[1, 0] - imagePoint0[1, 0] - ynoise)))
+                imageCornerProjectedOffset.append(np.linalg.norm([initialImagePoint[0, 0] - imagePoint0[0, 0] - xnoise,
+                                                                  initialImagePoint[1, 0] - imagePoint0[1, 0] - ynoise]))
                 kpId += 1
+        if numOutOfBound > 0 or numFailedProjection > numLandmarks / 2:
+            print("For frame at {:.6f} s, {} out of time bound landmarks, {} failed to project landmarks".format( \
+                state_time, numOutOfBound, numFailedProjection))
 
         assert kpId == len(imageCornerProjected)
         return np.array(imageCornerProjected), frameKeypoints, imageCornerProjectedOffset
