@@ -81,11 +81,12 @@ def saveStates(times, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset = 
 
 
 def saveBSplineRefImuMeas(cself, filename):
-    print >> sys.stdout, "  Saving IMU measurements generated from B-spline (time wxyz, axyz bg, ba in metric units) to", filename
+    print >> sys.stdout, "  Saving IMU measurements generated from B-spline to", filename
 
     idx = 0
     imu = cself.ImuList[idx]    
     poseSplineDv = cself.poseDv
+    print("  imuData begin at {:.6f} end at {:.6f} imu time offset {}".format(imu.imuData[0].stamp.toSec(), imu.imuData[-1].stamp.toSec(), imu.timeOffset))
     times = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
                       if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
                       and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
@@ -99,7 +100,7 @@ def saveBSplineRefImuMeas(cself, filename):
     accBias = imu.accelBiasDv.spline()    
     acc_bias_spline = np.array([accBias.evalD(t,0) for t in times])
 
-    print >> sys.stdout, 'Epitome of predicted inertial measurements'
+    print >> sys.stdout, '\tEpitome of predicted inertial measurements'
     print >> sys.stdout, "\t#times", times.shape
     print >> sys.stdout, "\t#gyro", predictedAng_body.shape
     print >> sys.stdout, "\t#accel", predicetedAccel_body.shape
@@ -110,50 +111,63 @@ def saveBSplineRefImuMeas(cself, filename):
     np.savetxt(filename,whole, fmt=['%.9f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f'])
 
 
-def saveBSpline(cself, bagtag):
+def saveBSpline(cself, outputDir):
     idx = 0
     imu = cself.ImuList[idx]    
     poseSplineDv = cself.poseDv
 
-    # imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
-    #                   if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
-    #                   and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max()])
+    computeCheckData = False
+    if computeCheckData:
+        imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData if
+                             poseSplineDv.spline().t_min() < im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max()])
+        refPoseStream = open("poses_check.txt", 'w')
+        print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"  
+        saveBSplineRefPose(imuTimes, poseSplineDv, stream=refPoseStream)
+        refPoseStream.close()
 
-    # refPoseStream = open("bspline_poses.txt", 'w')
-    # print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"  
-    # saveBSplineRefPose(imuTimes, poseSplineDv, stream=refPoseStream)
-    # refPoseStream.close()
+        timeList = list()
+        for obs in cself.CameraChain.camList[0].targetObservations:
+            frameTime = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toScalar() + obs.time().toSec() + \
+                    cself.CameraChain.camList[0].timeshiftCamToImuPrior
+            if frameTime > imuTimes[0] and frameTime < imuTimes[-1]:
+                timeList.append(frameTime)
+        refStateTimes = np.array(timeList)
+        refStateFile = "states_check.txt"
+        refStateStream = open(refStateFile, 'w')
+        print >> sys.stdout, "  Saving system states at camera rate generated from B-spline to", refStateFile
+        imu = cself.ImuList[0]
+        gyroBias = imu.gyroBiasDv.spline()
+        accBias = imu.accelBiasDv.spline()
+        saveStates(refStateTimes, poseSplineDv, gyroBias, accBias, 0.0, refStateStream)
+        refStateStream.close()
 
-    # timeList = list()
-    # for obs in cself.CameraChain.camList[0].targetObservations:
-    #     # Build a transformation expression for the time.
-    #     frameTime = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toExpression() + obs.time().toSec() + cself.CameraChain.camList[0].timeshiftCamToImuPrior
-    #     frameTimeScalar = frameTime.toScalar()
-    #     if frameTimeScalar > imuTimes[0] and frameTimeScalar < imuTimes[-1]:
-    #         timeList.append(frameTimeScalar)
-    # refStateTimes = np.array(timeList)
+        refImuFile = "imu_meas_check.txt"
+        saveBSplineRefImuMeas(cself, refImuFile)
 
-    # refStateFile = "bspline_states.txt"
-    # refStateStream = open(refStateFile, 'w')
-    # print >> sys.stdout, "  Saving system states at camera rate generated from B-spline to", refStateFile
-    # imu = cself.ImuList[0]
-    # gyroBias = imu.gyroBiasDv.spline()
-    # accBias = imu.accelBiasDv.spline()
-    # saveStates(refStateTimes, poseSplineDv, gyroBias, accBias, 0.0, refStateStream)
-    # refStateStream.close()
+        landmarks = cself.CameraChain.camList[0].detector.target().points()
+        landmarkCsv = "landmarks_check.csv"
+        with open(landmarkCsv, 'w') as stream:
+            header = ', '.join(["landmark index", "landmark position x [m]",
+                                "landmark position y [m]", "landmark position z [m]"])
+            stream.write('{}\n'.format(header))
+            for index, row in enumerate(landmarks):
+                stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
 
-    # refImuFile = "bspline_imu_meas.txt"
-    # saveBSplineRefImuMeas(cself, refImuFile)
-  
-    # check landmarks observed in an image.
-    # cameraIndex = 0
-    # frameIndex = 0
-    # imageCornerPoints = cself.CameraChain.getCornersImageSample(poseSplineDv, 0.0, cameraIndex, frameIndex)
-    # targetCornerPoints = cself.CameraChain.getCornersTargetSample(cameraIndex, frameIndex)
-    # sampleImageCorners = "bspline_image_corners_{}_{}.txt".format(cameraIndex, frameIndex)
-    # sampleTargetCorners = "landmarks_{}_{}.txt".format(cameraIndex, frameIndex)
-    # np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
-    # np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
+        # check landmarks observed in an image.
+        cameraIndex = 0
+        frameIndex = 0
+        obs = cself.CameraChain.camList[0].targetObservations[0]
+        camTimeOffset = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toScalar()
+        frameTime = camTimeOffset + obs.time().toSec() + \
+                    cself.CameraChain.camList[0].timeshiftCamToImuPrior
+        print('  Saving landmark observation at {:.6f} time shift prior {} residual time shift {}'.format( \
+                frameTime, cself.CameraChain.camList[0].timeshiftCamToImuPrior, camTimeOffset))
+        imageCornerPoints = cself.CameraChain.getCornersImageSample(poseSplineDv, 0.0, cameraIndex, frameIndex)
+        targetCornerPoints = cself.CameraChain.getCornersTargetSample(cameraIndex, frameIndex)
+        sampleImageCorners = "image_corners_{}_{}_check.txt".format(cameraIndex, frameIndex)
+        sampleTargetCorners = "landmarks_{}_{}_check.txt".format(cameraIndex, frameIndex)
+        np.savetxt(sampleImageCorners,imageCornerPoints, fmt=['%.5f', '%.5f', '%.5f', '%.5f', '%.5f', '%.5f'])
+        np.savetxt(sampleTargetCorners,targetCornerPoints, fmt=['%.5f', '%.5f', '%.5f'])
 
     poseFile = "bspline_pose.txt"
     poseSpline = cself.poseDv.spline()
@@ -163,11 +177,6 @@ def saveBSpline(cself, bagtag):
     imu = cself.ImuList[0]
     gyroBias = imu.gyroBiasDv.spline()   
     accBias = imu.accelBiasDv.spline()
-    print '\t\t\tstart time\t\tfinish time'
-    print 'poseSpline\t%.9f\t%.9f' % (poseSpline.t_min(), poseSpline.t_max())
-    print 'gyroBias\t%.9f\t%.9f' % (gyroBias.t_min(), gyroBias.t_max())
-    print 'accBias\t\t%.9f\t%.9f' % (accBias.t_min(), accBias.t_max())
-    print 'imu.timeOffset\t%.9f' % imu.timeOffset
 
     gyroBiasFile = "bspline_gyro_bias.txt"
     gyroBias.saveSplineToFile(gyroBiasFile)
@@ -177,14 +186,11 @@ def saveBSpline(cself, bagtag):
     accBias.saveSplineToFile(accBiasFile)    
     print("  saved acc bias B splines of order {} to {}".format(accBias.splineOrder(), accBiasFile))
 
-    landmarks = cself.CameraChain.camList[0].detector.target().points()
-    landmarkCsv = "landmarks.csv"
-    with open(landmarkCsv, 'w') as stream:
-        header = ', '.join(["landmark index", "landmark position x [m]",
-                            "landmark position y [m]", "landmark position z [m]"])
-        stream.write('{}\n'.format(header))
-        for index, row in enumerate(landmarks):
-            stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
+    print('Saved B splines of start and finish time')
+    print('\t\t\t\tstart time\t\tfinish time')
+    print('\tposeSpline\t{:.9f}\t{:.9f}'.format(poseSpline.t_min(), poseSpline.t_max()))
+    print('\tgyroBias\t{:.9f}\t{:.9f}'.format(gyroBias.t_min(), gyroBias.t_max()))
+    print('\taccBias\t\t{:.9f}\t{:.9f}'.format(accBias.t_min(), accBias.t_max()))
 
 def loadArrayWithHeader(arrayFile):
     with open(arrayFile) as f:
@@ -203,7 +209,7 @@ def loadPoseBSpline(knotCoeffFile):
     splineOrder = getSplineOrder(knotCoeffFile)
     poseSpline = bsplines.BSplinePose(splineOrder, sm.RotationVector())
     poseSpline.initSplineFromFile(knotCoeffFile)
-    print("Initialized a pose spline with {} knots and coefficients {}.".format( \
+    print("  Initialized a pose spline with {} knots and coefficients {}.".format( \
             poseSpline.knots().size, poseSpline.coefficients().shape))
     poseDv = asp.BSplinePoseDesignVariable(poseSpline)
     return poseDv
@@ -212,7 +218,7 @@ def loadBSpline(knotCoeffFile):
     splineOrder = getSplineOrder(knotCoeffFile)
     spline = bsplines.BSpline(splineOrder)
     spline.initSplineFromFile(knotCoeffFile)
-    print("Initialized a Euclidean spline with {} knots and coefficients {}.".format( \
+    print("  Initialized a Euclidean spline with {} knots and coefficients {}.".format( \
             spline.knots().size, spline.coefficients().shape))
     return asp.EuclideanBSplineDesignVariable(spline)
 

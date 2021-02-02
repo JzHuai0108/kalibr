@@ -47,8 +47,8 @@ class GridCalibrationTargetObservation {
   /// \brief get all (observed) corners in image coordinates (order matches getCornersImageFrame)
   unsigned int getCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const;
   
-  /// \brief get all corners in image coordinates
-  unsigned int getAllCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const;
+  /// \brief get all (observed or not) target corners.
+  unsigned int getAllCornersTargetFrame(Eigen::Matrix<double, -1, 3> &outCornerList) const;
 
   /// \brief get all corners in target frame coordinates (order matches getObservedTargetFrame)
   unsigned int getCornersImageFrame(std::vector<cv::Point2f> &outCornerList) const;

@@ -20,8 +20,8 @@ def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c):
     timeExpression = dv.toExpression()
 
     if timeScalar <= poseSplineDv.spline().t_min() or timeScalar >= poseSplineDv.spline().t_max():
-        print("getCameraPose: {:.9f} time out of range [{:.9f}, {:.9f}]".format( \
-            timeScalar, poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max()))
+        # print("getCameraPose: {:.9f} time out of range [{:.9f}, {:.9f}]".format( \
+        #     timeScalar, poseSplineDv.spline().t_min(), poseSplineDv.spline().t_max()))
         return sm.Transformation(), False
 
     T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
@@ -59,6 +59,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         self.poseSplineDv = BSplineIO.loadPoseBSpline(args.pose_file)
         self.gyroBiasSplineDv = BSplineIO.loadBSpline(args.gyro_bias_file)
         self.accBiasSplineDv = BSplineIO.loadBSpline(args.acc_bias_file)
+        self.showOnScreen = not args.dontShowReport
 
         print("Camera chain from {}".format(args.chain_yaml))
         chain = kc.CameraChainParameters(args.chain_yaml)        
@@ -131,11 +132,9 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         options.imageStepping = imageStepping
         options.plotCornerReprojection = showReproj
         options.filterCornerOutliers = True
-        
-        self.targetObservation = acv.GridCalibrationTargetObservation(grid) # this line works though 
-        # in the constructor GridCalibrationTargetObservation(GridCalibrationTarget::Ptr) is
-        # inconsistent with GridCalibrationTargetBase::Ptr
-        self.allTargetCorners = np.array(self.targetObservation.getAllCornersTargetFrame()) # nx3
+
+        self.targetObservation = acv.GridCalibrationTargetObservation(grid)
+        self.allTargetCorners = self.targetObservation.getAllCornersTargetFrame() # nx3
         assert self.allTargetCorners.shape[0] == self.targetObservation.getTotalTargetPoint()
 
     def checkNaiveVsNewtonRsProjection(self):
@@ -161,13 +160,12 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             t += interval
         return timeList
 
-    def __generateStateTimes(self, rate):
+    def __generateStateTimes(self, rate, timePadding):
         tmin = max(self.poseSplineDv.spline().t_min(), self.gyroBiasSplineDv.spline().t_min(), \
-                self.accBiasSplineDv.spline().t_min()) 
+                self.accBiasSplineDv.spline().t_min()) + timePadding
         tmax = min(self.poseSplineDv.spline().t_max(), self.gyroBiasSplineDv.spline().t_max(), \
-                self.accBiasSplineDv.spline().t_max())
+                self.accBiasSplineDv.spline().t_max()) - timePadding
         return self.__generateSampleTimes(tmin, tmax, rate)
-
 
     def simulateImuData(self, trueImuTimes):
         """simulate inertial measurements at true epochs without time offset.
@@ -210,6 +208,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             omega = gerr.getPredictedMeasurement()
             gyroBias = gyroSpline.eval(tk)
 
+            # check
             gerr2 = ket.EuclideanError(omegaDummy, omegaInvR * weightDummy, w)
             omega2 = gerr2.getPredictedMeasurement()
             assert np.linalg.norm(omega - omega2 - gyroBias) < 1e-8
@@ -232,7 +231,6 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             imuBiases[index, :3] = gyroBias
             imuBiases[index, 3:] = accBias
         return trueImuTimes, imuData, imuBiases
-    
 
     def simulateCameraObservations(self, trueFrameTimes, outputDir):
         '''simulate camera observations for frames at all ref state times and plus noise'''
@@ -241,7 +239,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         # Descriptors are not needed. In tracks, track_id can be set to -1 as it is not used for now.
         # Timestamps of vertices and tracks should be in camera clock. 
         # The timestamp in tracks.csv for each keypoint is the timestamp for the observing frame.
-        
+
         # simulate RS observations at state times, but the camera timestamps are shifted by offset.
         imageCornerOffsetNorms = list()
         bins = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, \
@@ -260,7 +258,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                                                 imageNoise)
             imageCornerOffsetNorms += keypointOffsets
             if vertexId % 300 == 0:
-                print('Projected {:4d} target landmarks for state at {:.9f}'.format(len(noisyKeypoints), frameTime))
+                print('  Projected {:d} target landmarks for state at {:.9f}'.format(len(noisyKeypoints), frameTime))
             for keypoint in noisyKeypoints:
                 landmark_observations[keypoint[0]].append(
                     (vertexId, keypoint[1], keypoint[2], keypoint[3], keypoint[4]))
@@ -291,15 +289,25 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                         timeString, vertexId, cameraIndex, keypoint[1], keypoint[2], keypoint[3], imageNoise,
                         keypoint[4], -1))
 
-        print('Written landmark observations to {}'.format(observationCsv))
-        print('  Histogram of the offset in the infinity norm due to line delay and noise')
+        print('  Written landmark observations to {}'.format(observationCsv))
+        print('  Histogram of norm of the offset due to line delay and noise')
         counts, newBins, patches = plt.hist(imageCornerOffsetNorms, bins)
-        print('  counts:{}\nbins:{}'.format(counts, newBins))        
+        print('  counts:{}\n  bins:{}'.format(counts, newBins))
         plt.title('Distribution of norm of the offsets due to line delay and noise')
-        plt.show()
+        if self.showOnScreen:
+            plt.show()
 
     def simulate(self, outputDir):
-        trueFrameTimes = self.__generateStateTimes(self.cameraConfig.getUpdateRate())
+        landmarkCsv = os.path.join(outputDir, "landmarks.csv")
+        print("Saving landmarks to {}...".format(landmarkCsv))
+        with open(landmarkCsv, 'w') as stream:
+            header = ', '.join(["landmark index", "landmark position x [m]",
+                                "landmark position y [m]", "landmark position z [m]"])
+            stream.write('{}\n'.format(header))
+            for index, row in enumerate(self.allTargetCorners):
+                stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
+        timePadding = 2.0 / self.cameraConfig.getUpdateRate()
+        trueFrameTimes = self.__generateStateTimes(self.cameraConfig.getUpdateRate(), timePadding)
 
         print('Simulating states...')
         print("  Camera frame true start time {:.9f} and true finish time {:.9f}".format( \
@@ -311,7 +319,8 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             print("  Written simulated states to {}".format(vertexCsv))
 
         print("Simulating IMU data...")
-        trueImuTimes = self.__generateStateTimes(self.imuConfig.getUpdateRate())
+        imuTimePadding = 2.0 / self.cameraConfig.getUpdateRate()
+        trueImuTimes = self.__generateStateTimes(self.imuConfig.getUpdateRate(), imuTimePadding)
         imuTimes, imuData, imuBiases = self.simulateImuData(trueImuTimes)
         imuCsv = os.path.join(outputDir, "imu.csv")
         with open(imuCsv, "w") as stream:
@@ -478,7 +487,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                                                                   initialImagePoint[1, 0] - imagePoint0[1, 0] - ynoise]))
                 kpId += 1
         if numOutOfBound > 0 or numFailedProjection > numLandmarks / 2:
-            print("For frame at {:.6f} s, {} out of time bound landmarks, {} failed to project landmarks".format( \
+            print("  For frame at {:.6f} s, {} out of time bound landmarks, {} failed to project landmarks".format( \
                 state_time, numOutOfBound, numFailedProjection))
 
         assert kpId == len(imageCornerProjected)

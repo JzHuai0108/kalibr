@@ -154,19 +154,9 @@ Eigen::MatrixXd getCornersTargetFrame(
 Eigen::MatrixXd getAllCornersTargetFrame(
     aslam::cameras::GridCalibrationTargetObservation * frame) {
   // Get the corners in the target frame
-  std::vector<cv::Point3f> targetCorners;
+  Eigen::Matrix<double, -1, 3> targetCorners;
   unsigned int numCorners = frame->getAllCornersTargetFrame(targetCorners);
-
-  // Convert all target corners to eigen
-  Eigen::MatrixXd targetCornersEigen = Eigen::MatrixXd::Zero(numCorners, 3);
-
-  for (unsigned int i = 0; i < numCorners; i++) {
-    targetCornersEigen(i, 0) = targetCorners[i].x;
-    targetCornersEigen(i, 1) = targetCorners[i].y;
-    targetCornersEigen(i, 2) = targetCorners[i].z;
-  }
-
-  return targetCornersEigen;
+  return targetCorners;
 }
 
 /// \brief get all corners in image frame coordinates (order matches getObservedTargetFrame)
@@ -205,9 +195,9 @@ Eigen::MatrixXd getCornerReprojection(aslam::cameras::GridCalibrationTargetObser
 }
 
 /// \brief get all corners in image frame coordinates (order matches getObservedTargetFrame)
-Eigen::MatrixXd projectATargetPoint(aslam::cameras::GridCalibrationTargetObservation * frame, const boost::shared_ptr<aslam::cameras::CameraGeometryBase> cameraGeometry, 
-const sm::kinematics::Transformation & T_t_c, const size_t i) {
-  
+Eigen::MatrixXd projectATargetPoint(aslam::cameras::GridCalibrationTargetObservation * frame, 
+    const boost::shared_ptr<aslam::cameras::CameraGeometryBase> cameraGeometry, 
+    const sm::kinematics::Transformation & T_t_c, const size_t i) {
   cv::Point2f outPointReproj;
   bool isValid = frame->projectATargetPoint(cameraGeometry, T_t_c, i, outPointReproj);
 

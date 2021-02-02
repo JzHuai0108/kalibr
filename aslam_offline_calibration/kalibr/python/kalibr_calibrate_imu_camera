@@ -233,8 +233,7 @@ def main():
     print
 
     print "Saving fitted B splines..."
-    BSplineIO.saveBSpline(iCal, bagtag)
-    print "B spline models written to files with tag {}".format(bagtag)
+    BSplineIO.saveBSpline(iCal, "")
 
 if __name__ == "__main__":
     main()
