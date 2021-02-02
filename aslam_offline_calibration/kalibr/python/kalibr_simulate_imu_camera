@@ -74,6 +74,9 @@ def parseArgs():
             help=('The file of the knot coefficients of the accelerometer bias B spline.'
                   ' If not specified, it will be deduced from the pose_file!'))
     groupSim.add_argument('--output_dir', help='Where to put output files?')
+    groupSim.add_argument('--bias-from-splines', action='store_true', dest='biasFromSplines',
+                          help=('Simulate IMU biases from provided bias splines? '
+                               'Or else generate noise per IMU parameters.'))
     groupSim.add_argument('--dont-show-report', action='store_true', dest='dontShowReport',
                           help='Do not show the report on screen after simulation.')
 

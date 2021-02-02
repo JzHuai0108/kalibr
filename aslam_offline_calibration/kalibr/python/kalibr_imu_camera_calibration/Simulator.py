@@ -1,4 +1,5 @@
 import copy
+import math
 import os
 from random import gauss
 import sys
@@ -49,6 +50,37 @@ def printExtraImuDetails(imuConfig):
     print('  Gravity in target: {}'.format(gravityInTarget))
 
 
+def addNoiseToImuReadings(imuMeasurements, imuParameters):
+    """
+    :param imuParameters: imuConfig
+    :param times: time of each IMU reading in seconds.
+    :param imuMeasurements: numpy array, N x 6, accel and gyro data.
+    :return: 
+    """
+    trueBiases = copy.deepcopy(imuMeasurements)
+    noisyImuMeasurements = copy.deepcopy(imuMeasurements)
+    bgk = imuParameters.getInitialGyroBias()
+    bak = imuParameters.getInitialAccBias()
+    gyroNoiseDiscrete, gyroWalk, gyroNoise = imuParameters.getGyroStatistics()
+    accNoiseDiscrete, accWalk, accNoise = imuParameters.getAccelerometerStatistics()
+    sqrtRate = math.sqrt(imuParameters.getUpdateRate())
+    sqrtDeltaT = 1.0 / sqrtRate
+
+    for index, reading in enumerate(imuMeasurements):
+        trueBiases[index, :3] = bak
+        trueBiases[index, 3:] = bgk
+        # eq 50, Oliver Woodman, An introduction to inertial navigation
+        noisyImuMeasurements[index, :3] = imuMeasurements[index, :3] + bak + np.random.normal(0, accNoiseDiscrete, 3)
+        noisyImuMeasurements[index, 3:] = imuMeasurements[index, 3:] + bgk + np.random.normal(0, gyroNoiseDiscrete, 3)
+        # eq 51, Oliver Woodman, An introduction to inertial navigation,
+        # we do not divide sqrtDeltaT by sqrtT because sigma_gw_c is bias white noise density
+        # for bias random walk (BRW) whereas eq 51 uses bias instability (BS) having the
+        # same unit as the IMU measurements. also see eq 9 therein.
+        bgk += np.random.normal(0, gyroWalk * sqrtDeltaT, 3)
+        bak += np.random.normal(0, accWalk * sqrtDeltaT, 3)
+    return noisyImuMeasurements, trueBiases
+
+
 class RsVisualInertialMeasViaBSplineSimulator(object):
     '''
     simulate visual(rolling shutter) inertial measurements with provided
@@ -60,6 +92,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         self.gyroBiasSplineDv = BSplineIO.loadBSpline(args.gyro_bias_file)
         self.accBiasSplineDv = BSplineIO.loadBSpline(args.acc_bias_file)
         self.showOnScreen = not args.dontShowReport
+        self.biasFromSplines = args.biasFromSplines
 
         print("Camera chain from {}".format(args.chain_yaml))
         chain = kc.CameraChainParameters(args.chain_yaml)        
@@ -197,21 +230,20 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         omegaInvR = np.linalg.inv(Rgyro)
         alphaInvR = np.linalg.inv(Raccel)
 
-        # TODO(jhuai): add IMU noise when biases are not generated from B splines.
         for index, tk in enumerate(trueImuTimes):
             # GyroscopeError(measurement, invR, angularVelocity, bias)
             w_b = self.poseSplineDv.angularVelocityBodyFrame(tk)
             b_i = self.gyroBiasSplineDv.toEuclideanExpression(tk,0)
             C_i_b = q_i_b_Dv.toExpression()
             w = C_i_b * w_b
-            gerr = ket.EuclideanError(omegaDummy, omegaInvR * weightDummy, w + b_i)
-            omega = gerr.getPredictedMeasurement()
-            gyroBias = gyroSpline.eval(tk)
-
-            # check
-            gerr2 = ket.EuclideanError(omegaDummy, omegaInvR * weightDummy, w)
-            omega2 = gerr2.getPredictedMeasurement()
-            assert np.linalg.norm(omega - omega2 - gyroBias) < 1e-8
+            if self.biasFromSplines:
+                gerr = ket.EuclideanError(omegaDummy, omegaInvR * weightDummy, w + b_i)
+                omega = gerr.getPredictedMeasurement()
+                gyroBias = gyroSpline.eval(tk)
+            else:
+                gerr = ket.EuclideanError(omegaDummy, omegaInvR * weightDummy, w)
+                omega = gerr.getPredictedMeasurement()
+                gyroBias = np.array([0, 0, 0])
 
             C_b_w = self.poseSplineDv.orientation(tk).inverse()
             a_w = self.poseSplineDv.linearAcceleration(tk)
@@ -222,15 +254,27 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             r_b = r_b_Dv.toExpression()
             a = C_i_b * (C_b_w * (a_w - gravityExpression) + \
                             w_dot_b.cross(r_b) + w_b.cross(w_b.cross(r_b)))
-            aerr = ket.EuclideanError(alphaDummy, alphaInvR * weightDummy, a + b_i)
-            alpha = aerr.getPredictedMeasurement()
-            accBias = accSpline.eval(tk)
+            if self.biasFromSplines:
+                aerr = ket.EuclideanError(alphaDummy, alphaInvR * weightDummy, a + b_i)
+                alpha = aerr.getPredictedMeasurement()
+                accBias = accSpline.eval(tk)
+            else:
+                aerr = ket.EuclideanError(alphaDummy, alphaInvR * weightDummy, a)
+                alpha = aerr.getPredictedMeasurement()
+                accBias = np.array([0, 0, 0])
 
-            imuData[index, :3] = omega
-            imuData[index, 3:] = alpha
-            imuBiases[index, :3] = gyroBias
-            imuBiases[index, 3:] = accBias
-        return trueImuTimes, imuData, imuBiases
+            imuData[index, :3] = alpha
+            imuData[index, 3:] = omega
+            imuBiases[index, :3] = accBias
+            imuBiases[index, 3:] = gyroBias
+
+        if not self.biasFromSplines:
+            print("  Add noise to IMU readings...")
+            noisyImuData, imuBiases = addNoiseToImuReadings(imuData, self.imuConfig)
+        else:
+            noisyImuData = imuData
+
+        return trueImuTimes, noisyImuData, imuBiases
 
     def simulateCameraObservations(self, trueFrameTimes, outputDir):
         '''simulate camera observations for frames at all ref state times and plus noise'''

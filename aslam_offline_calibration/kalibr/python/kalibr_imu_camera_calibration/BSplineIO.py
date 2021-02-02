@@ -106,8 +106,8 @@ def saveBSplineRefImuMeas(cself, filename):
     print >> sys.stdout, "\t#accel", predicetedAccel_body.shape
     print >> sys.stdout, "\t#gyro bias", gyro_bias_spline.shape
     print >> sys.stdout, "\t#accel bias", acc_bias_spline.shape
-    
-    whole=np.concatenate((np.array([times]).T, predictedAng_body, predicetedAccel_body, gyro_bias_spline, acc_bias_spline),axis=1)
+
+    whole=np.concatenate((np.array([times]).T, predictedAccel_body, predicetedAng_body, acc_bias_spline, gyro_bias_spline),axis=1)
     np.savetxt(filename,whole, fmt=['%.9f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f'])
 
 
