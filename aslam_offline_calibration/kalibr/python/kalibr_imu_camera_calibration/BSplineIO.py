@@ -141,7 +141,7 @@ def saveBSpline(cself, outputDir):
         saveStates(refStateTimes, poseSplineDv, gyroBias, accBias, 0.0, refStateStream)
         refStateStream.close()
 
-        refImuFile = "imu_meas_check.txt"
+        refImuFile = "imu_check.txt"
         saveBSplineRefImuMeas(cself, refImuFile)
 
         landmarks = cself.CameraChain.camList[0].detector.target().points()

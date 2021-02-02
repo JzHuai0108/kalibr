@@ -154,7 +154,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
     def __generateSampleTimes(self, tmin, tmax, rate):
         timeList = list()
         interval = 1.0 / rate
-        t = tmin + 1e-6
+        t = tmin
         while t < tmax:
             timeList.append(t)
             t += interval
@@ -197,7 +197,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         omegaInvR = np.linalg.inv(Rgyro)
         alphaInvR = np.linalg.inv(Raccel)
 
-        # TODO(jhuai): add IMU noise.
+        # TODO(jhuai): add IMU noise when biases are not generated from B splines.
         for index, tk in enumerate(trueImuTimes):
             # GyroscopeError(measurement, invR, angularVelocity, bias)
             w_b = self.poseSplineDv.angularVelocityBodyFrame(tk)
@@ -306,7 +306,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             stream.write('{}\n'.format(header))
             for index, row in enumerate(self.allTargetCorners):
                 stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
-        timePadding = 2.0 / self.cameraConfig.getUpdateRate()
+        timePadding = 2.5 / self.cameraConfig.getUpdateRate()
         trueFrameTimes = self.__generateStateTimes(self.cameraConfig.getUpdateRate(), timePadding)
 
         print('Simulating states...')
