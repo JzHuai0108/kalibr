@@ -113,7 +113,6 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         self.targetObservation = None
         self.allTargetCorners = None
         self.setupCalibrationTarget(targetConfig, showExtraction=False, showReproj=False, imageStepping=False)
-        self.imageHeight = self.cameraConfig.getResolution()[1]
         self.timeOffset = chain.getTimeshiftCamImu(camNr)
 
         print("IMU configuration:")
@@ -407,7 +406,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 imageCornerProjected.append(lastImagePoint)
                 continue         
             while numIter < 8:
-                currTime = (lastImagePoint[1, 0] - self.imageHeight/2)*line_delay + state_time            
+                currTime = lastImagePoint[1, 0] * line_delay + state_time            
                 sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
                 imagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
                 if not isValid or imagePoint[2, 0] == 0.0:
@@ -483,7 +482,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
 
                 # compute g(y_0)
-                currTime = (lastImagePoint[1, 0] - self.imageHeight/2)*line_delay + state_time
+                currTime = lastImagePoint[1, 0] * line_delay + state_time
                 sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
 
                 imagePoint0 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
@@ -497,7 +496,7 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                     break
                 # compute Jacobian of g(y) relative to y at y_0
                 eps = 1
-                currTime = (lastImagePoint[1, 0] + eps - self.imageHeight/2)*line_delay + state_time
+                currTime = (lastImagePoint[1, 0] + eps) * line_delay + state_time
                 sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
 
                 imagePoint1 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
