@@ -31,8 +31,8 @@ kalibr_calibrate_imu_camera --cam camchain.yaml --target april_6x6.yaml --imu im
 ```
 The output results will include the B-spline model, knotCoeffT, and ref_pose, ref_state, ref_imu_meas generated from the model. More details refer to saveBSpline in python/kalibr_imu_camera_calibration/IccUtil.py.
 
-2. Based on the B-spline model, simulate rolling shutter camera measurements
-
+2. Based on the B-spline model, simulate rolling shutter camera measurements.
+Templates for the camera-IMU system, and the IMU is at the config_templates folder.
 ```
 kalibr_simulate_imu_camera $output_dir/bspline_pose.txt --cam $script_dir/camchain_template.yaml --imu $script_dir/imu_template.yaml \
   --target $data_dir/april_6x6.yaml --output_dir $output_dir
