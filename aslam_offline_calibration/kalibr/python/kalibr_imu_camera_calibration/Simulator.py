@@ -169,17 +169,18 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         self.allTargetCorners = self.targetObservation.getAllCornersTargetFrame() # nx3
         assert self.allTargetCorners.shape[0] == self.targetObservation.getTotalTargetPoint()
 
-    def checkNaiveVsNewtonRsProjection(self):
-        for frameId in range(1):
-            state_time = self.refStateTimes[0]
-            line_delay = float(self.cameraConfig.getLineDelayNanos()) * 1e-9
-            imageCornersNaive = self.naiveMethodToRsProjection(state_time, line_delay, False)
-            imageCornersNewton, unusedKeypoints, _ = \
-                self.newtonMethodToRsProjection(state_time, line_delay, 1.0, False)
+    def checkNaiveVsNewtonRsProjection(self, outputDir):
+        timePadding = 2.5 / self.cameraConfig.getUpdateRate()
+        trueFrameTimes = self.__generateStateTimes(self.cameraConfig.getUpdateRate(), timePadding)
+        state_time = trueFrameTimes[0]
+        line_delay = float(self.cameraConfig.getLineDelayNanos()) * 1e-9
+        imageCornersNaive = self.naiveMethodToRsProjection(state_time, line_delay, False)
+        imageCornersNewton, unusedKeypoints, _ = \
+            self.newtonMethodToRsProjection(state_time, line_delay, 1.0, False)
 
         assert np.allclose(imageCornersNaive[:, :, 0], imageCornersNewton[:, :, 0])
-        reproducedImageCornerFile = self.pose_file.replace("pose", "naive_vs_newton", 1)
-        np.savetxt(reproducedImageCornerFile,
+        imageCornerFile = os.path.join(outputDir, "naive_vs_newton_rs_check.txt")
+        np.savetxt(imageCornerFile,
                    np.concatenate((imageCornersNaive[:, :, 0], imageCornersNewton[:, :, 0]), axis=1), \
                    fmt=['%.9f', '%.9f', '%d', '%.9f', '%.9f', '%d'])
 
