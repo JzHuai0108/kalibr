@@ -85,7 +85,7 @@ def parseArgs():
     groupImu.add_argument('--imu-models', nargs='+', dest='imu_models', help='The IMU models to estimate. Currently supported are \'calibrated\', \'scale-misalignment\' and \'scale-misalignment-size-effect\'.', action=Once)
     
     groupTarget = parser.add_argument_group('Calibration target')
-    groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file', required=True, action=Once)
+    groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file', action=Once)
     
     #optimization options
     groupOpt = parser.add_argument_group('Optimization options')
@@ -158,12 +158,15 @@ def main():
         else:
             sm.logError("Model {0} is currently unsupported.".format(imu_model))
             sys.exit(2)
-    
-    #load calibration target configuration 
-    targetConfig = kc.CalibrationTargetParameters(parsed.target_yaml)
-       
-    print "Initializing calibration target:"
-    targetConfig.printDetails()
+
+    if parsed.target_yaml:
+        #load calibration target configuration
+        targetConfig = kc.CalibrationTargetParameters(parsed.target_yaml)
+
+        print "Initializing calibration target:"
+        targetConfig.printDetails()
+    else:
+        targetConfig = None
     
     print "Initializing camera chain:"
     chain = kc.CameraChainParameters(parsed.chain_yaml)      
@@ -232,8 +235,9 @@ def main():
     print "  Report written to {0}".format(reportFile)
     print
 
-    print "Saving fitted B splines..."
-    BSplineIO.saveBSpline(iCal, "")
+    if targetConfig:
+        print "Saving fitted B splines..."
+        BSplineIO.saveBSpline(iCal, "")
 
 if __name__ == "__main__":
     main()

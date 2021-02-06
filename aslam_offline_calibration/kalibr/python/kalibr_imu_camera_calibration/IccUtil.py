@@ -248,7 +248,8 @@ def printResultTxt(cself, stream=sys.stdout):
         print >> stream, "cam{0}".format(camNr)
         print >> stream, "-----"
         cam.camConfig.printDetails(stream)
-        cam.targetConfig.printDetails(stream)
+        if cam.targetConfig:
+            cam.targetConfig.printDetails(stream)
         print >> stream, ""
     
 	print >> stream, ""

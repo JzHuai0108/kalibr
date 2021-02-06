@@ -55,6 +55,9 @@ class BagImageDatasetReader(object):
     if bag_from_to:
       self.indices = self.truncateIndicesFromTime(self.indices, bag_from_to)
 
+  def hasFeatureAssociations(self):
+    return False
+
   # sort the ros messegaes by the header time not message time
   def sortByTime(self, indices):
     self.timestamp_corrector = sm.DoubleTimestampCorrector()

@@ -34,6 +34,17 @@ def initImuBagDataset(bagfile, topic, from_to=None, perform_synchronization=Fals
     print "\tNumber of messages: {0}".format(len(reader.index))
     return reader
 
+def initCameraDataset(path, topic, T_cam_imu, from_to=None, perform_synchronization=False):
+    if path.endswith('.bag'):
+        return initCameraBagDataset(path, topic, from_to, perform_synchronization)
+    else:
+        return kc.VimapCsvReader(path, topic, T_cam_imu, from_to, perform_synchronization)
+
+def initImuDataset(path, topic, from_to=None, perform_synchronization=False):
+    if path.endswith('.bag'):
+        return initImuBagDataset(path, topic, from_to, perform_synchronization)
+    else:
+        return kc.VimapImuCsvReader(path, topic, from_to, perform_synchronization)
 
 #mono camera
 class IccCamera():
@@ -56,11 +67,15 @@ class IccCamera():
         
         #initialize the camera data
         self.camera = kc.AslamCamera.fromParameters( camConfig )
-        
-        #extract corners
-        self.setupCalibrationTarget( targetConfig, showExtraction=showCorners, showReproj=showReproj, imageStepping=showOneStep )
-        multithreading = not (showCorners or showReproj or showOneStep)
-        self.targetObservations = kc.extractCornersFromDataset(self.dataset, self.detector, multithreading=multithreading)
+
+        if self.dataset.hasFeatureAssociations():
+            self.targetObservations = self.dataset.getFeatureAssociations()
+        else:
+            # extract corners
+            self.setupCalibrationTarget(targetConfig, showExtraction=showCorners, showReproj=showReproj,
+                                        imageStepping=showOneStep)
+            multithreading = not (showCorners or showReproj or showOneStep)
+            self.targetObservations = kc.extractCornersFromDataset(self.dataset, self.detector, multithreading=multithreading)
         
         #an estimate of the gravity in the world coordinate frame  
         self.gravity_w = np.array([9.80655, 0., 0.])
@@ -483,8 +498,9 @@ class IccCameraChain():
         self.camList = []
         for camNr in range(0, chainConfig.numCameras()):
             camConfig = chainConfig.getCameraParameters(camNr)
-            dataset = initCameraBagDataset(parsed.bagfile[0], camConfig.getRosTopic(), \
-                                           parsed.bag_from_to, parsed.perform_synchronization)
+            dataset = initCameraDataset(parsed.bagfile[0], camConfig.getRosTopic(),
+                                        chainConfig.getExtrinsicsImuToCam(camNr),
+                                        parsed.bag_from_to, parsed.perform_synchronization)
             
             #create the camera
             self.camList.append( IccCamera( camConfig, 
@@ -664,8 +680,8 @@ class IccImu(object):
         self.imuConfig = self.ImuParameters(imuConfig)
 
         #load dataset
-        self.dataset = initImuBagDataset(parsed.bagfile[0], imuConfig.getRosTopic(), \
-                                         parsed.bag_from_to, parsed.perform_synchronization)
+        self.dataset = initImuDataset(parsed.bagfile[0], imuConfig.getRosTopic(), \
+                                      parsed.bag_from_to, parsed.perform_synchronization)
         
         #statistics
         self.accelUncertaintyDiscrete, self.accelRandomWalk, self.accelUncertainty = self.imuConfig.getAccelerometerStatistics()
