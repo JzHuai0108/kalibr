@@ -196,7 +196,18 @@ class VimapCsvReader(object):
         return self.targetObservations[idx]
 
     def getFeatureAssociations(self):
-        return self.targetObservations[self.indices[0]:self.indices[-1] + 1]
+        pnpObservations = []
+        for index in self.indices:
+            observation = acv.PnPObservation()
+            frameObservation = self.targetObservations[index]
+            observation.setCornersImageFrame(np.array(frameObservation.getCornersImageFrame()))
+            observation.setCornersTargetFrame(np.array(frameObservation.getCornersTargetFrame()))
+            observation.setCornersIdx(np.array(frameObservation.getCornersIdx()))
+            observation.setTime(frameObservation.time())
+            observation.set_T_t_c(frameObservation.T_t_c())
+
+            pnpObservations.append(observation)
+        return pnpObservations
 
     def loadVimap(self, folder):
         trackCsv = os.path.join(folder, 'tracks.csv')

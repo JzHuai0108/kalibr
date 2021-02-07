@@ -18,12 +18,149 @@
 namespace aslam {
 namespace cameras {
 
+class ObservationInterface {
+ public:
+  /// \brief get all (observed) corners in image coordinates (order matches getCornersImageFrame)
+  virtual unsigned int getCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const = 0;
+  /// \brief get all corners in target frame coordinates (order matches getObservedTargetFrame)
+  virtual unsigned int getCornersImageFrame(std::vector<cv::Point2f> &outCornerList) const = 0;
+  /// \brief get the point index of all (observed) corners (order corresponds to the output
+  ///        of getCornersImageFrame and getCornersTargetFrame)
+  virtual unsigned int getCornersIdx(std::vector<unsigned int> &outCornerIdx) const = 0;
+
+  
+  ///////////////////////////////////////////////////
+  // Serialization support
+  ///////////////////////////////////////////////////
+  enum {
+    CLASS_SERIALIZATION_VERSION = 0
+  };
+  BOOST_SERIALIZATION_SPLIT_MEMBER();
+
+  template<class Archive>
+  void load(Archive & /* ar */, const unsigned int /* version */) {
+  }
+
+  template<class Archive>
+  void save(Archive & /* ar */, const unsigned int /* version */) const {
+  }
+};
+
+
+class PnPObservation : public ObservationInterface {
+ public:
+  PnPObservation() {}
+  unsigned int getCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const override {
+    outCornerList = landmarkList_;
+    return outCornerList.size();
+  }
+
+  unsigned int getCornersImageFrame(std::vector<cv::Point2f> &outCornerList) const override {
+    outCornerList = observationList_;
+    return outCornerList.size();
+  }
+
+  unsigned int getCornersIdx(std::vector<unsigned int> &outCornerIdx) const override {
+    outCornerIdx = landamrkIdList_;
+    return outCornerIdx.size();
+  }
+
+  void setCornersTargetFrame(const Eigen::Matrix<double, -1, 3> &landmarkList) {
+    landmarkList_.resize(landmarkList.rows());
+    for (int i = 0; i < landmarkList.rows(); ++i) {
+      landmarkList_[i].x = landmarkList(i, 0);
+      landmarkList_[i].y = landmarkList(i, 1);
+      landmarkList_[i].z = landmarkList(i, 2);
+    }
+  }
+
+  void setCornersImageFrame(const Eigen::Matrix<double, -1, 2> &cornerList) {
+    observationList_.resize(cornerList.rows());
+    for (int i = 0; i < cornerList.rows(); ++i) {
+      observationList_[i].x = cornerList(i, 0);
+      observationList_[i].y = cornerList(i, 1);
+    }
+  }
+
+  void setCornersIdx(const Eigen::Matrix<int, -1, 1> &cornerIdx) {
+    landamrkIdList_.resize(cornerIdx.size());
+    for (int i = 0; i < cornerIdx.size(); ++i) {
+      landamrkIdList_[i] = cornerIdx[i];
+    }
+  }
+
+  unsigned int getCornerReprojection(const boost::shared_ptr<CameraGeometryBase> cameraGeometry,
+                                     std::vector<cv::Point2f> &outPointReproj) const {
+    return 0;
+  }
+
+    /// \brief get the transformation that takes points from
+  ///        camera coordinates to target coordinates.
+  const sm::kinematics::Transformation& T_t_c() const {
+    return _T_t_c;
+  }
+
+  void set_T_t_c(const sm::kinematics::Transformation & T_t_c) {
+    _T_t_c = T_t_c;
+  }
+
+  /// \brief get the time of the observation
+  aslam::Time time() const {
+    return _stamp;
+  }
+
+  /// \brief set the time of the observation
+  void setTime(const aslam::Time & stamp) {
+    _stamp = stamp;
+  }
+
+  /// \brief return true if the class has at least one successful observation
+  bool hasSuccessfulObservation() const {
+    return landamrkIdList_.size() > 0;
+  }
+
+ private:
+  /// \brief the transformation that takes points from
+  ///        camera coordinates to target coordinates.
+  sm::kinematics::Transformation _T_t_c;
+
+  /// \brief the image timestamp
+  aslam::Time _stamp;
+
+  std::vector<cv::Point3f> landmarkList_;
+  std::vector<cv::Point2f> observationList_;
+  std::vector<unsigned int> landamrkIdList_;
+
+  ///////////////////////////////////////////////////
+  // Serialization support
+  ///////////////////////////////////////////////////
+ public:
+  enum {CLASS_SERIALIZATION_VERSION = 1};
+  BOOST_SERIALIZATION_SPLIT_MEMBER()
+
+ protected:
+  friend class boost::serialization::access;
+
+  template<class Archive>
+  void load(Archive & ar, const unsigned int version) {
+    SM_ASSERT_LE(std::runtime_error, version,
+                 (unsigned int)CLASS_SERIALIZATION_VERSION,
+                 "Unsupported serialization version");
+    ar >> BOOST_SERIALIZATION_NVP(landamrkIdList_);
+  }
+
+  template<class Archive>
+  void save(Archive & ar, const unsigned int /* version */) const {
+    ar << BOOST_SERIALIZATION_NVP(landamrkIdList_);
+  }
+};
+
 /**
  * \class GridCalibrationTargetObservation
  * \brief an object representing the observation of a gridded calibration pattern in an image
  *
  */
-class GridCalibrationTargetObservation {
+class GridCalibrationTargetObservation : public ObservationInterface {
  public:
   SM_DEFINE_EXCEPTION(Exception, std::runtime_error);
 
@@ -45,17 +182,17 @@ class GridCalibrationTargetObservation {
   void clearImage();
 
   /// \brief get all (observed) corners in image coordinates (order matches getCornersImageFrame)
-  unsigned int getCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const;
+  unsigned int getCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const override;
   
   /// \brief get all (observed or not) target corners.
   unsigned int getAllCornersTargetFrame(Eigen::Matrix<double, -1, 3> &outCornerList) const;
 
   /// \brief get all corners in target frame coordinates (order matches getObservedTargetFrame)
-  unsigned int getCornersImageFrame(std::vector<cv::Point2f> &outCornerList) const;
+  unsigned int getCornersImageFrame(std::vector<cv::Point2f> &outCornerList) const override;
 
   /// \brief get the point index of all (observed) corners (order corresponds to the output
   ///        of getCornersImageFrame and getCornersTargetFrame)
-  unsigned int getCornersIdx(std::vector<unsigned int> &outCornerIdx) const;
+  unsigned int getCornersIdx(std::vector<unsigned int> &outCornerIdx) const override;
 
   /// \brief get the the reprojected corners of all observed corners
   unsigned int getCornerReprojection(const boost::shared_ptr<CameraGeometryBase> cameraGeometry,
@@ -209,6 +346,8 @@ class GridCalibrationTargetObservation {
 }  // namespace cameras
 }  // namespace aslam
 
+SM_BOOST_CLASS_VERSION(aslam::cameras::ObservationInterface);
+SM_BOOST_CLASS_VERSION(aslam::cameras::PnPObservation);
 SM_BOOST_CLASS_VERSION(aslam::cameras::GridCalibrationTargetObservation);
 
 #endif /* ASLAM_GRID_CALIBRATION_TARGET_OBSERVATION_HPP */

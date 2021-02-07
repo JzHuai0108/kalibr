@@ -609,7 +609,7 @@ bool OmniProjection::initializeIntrinsics(
     /// These functions were developed with the help of Lionel Heng and the excellent camodocal
     /// https://github.com/hengli/camodocal
     bool OmniProjection::estimateTransformation(
-        const GridCalibrationTargetObservation & obs,
+        const ObservationInterface & obs,
         sm::kinematics::Transformation & out_T_t_c) const {
       // Convert all chessboard corners to a fakey pinhole view.
       // Call the OpenCV pnp function.

@@ -133,7 +133,7 @@ class ExtendedUnifiedProjection {
   ///        On success out_T_t_c is filled in with the transformation that takes points from
   ///        the camera frame to the target frame
   /// \return true on success
-  bool estimateTransformation(const GridCalibrationTargetObservation & obs,
+  bool estimateTransformation(const ObservationInterface & obs,
                               sm::kinematics::Transformation & out_T_t_c) const;
 
   /// \brief compute the reprojection error based on a checkerboard observation.

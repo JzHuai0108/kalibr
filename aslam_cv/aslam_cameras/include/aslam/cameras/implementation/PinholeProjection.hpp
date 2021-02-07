@@ -832,7 +832,7 @@ size_t PinholeProjection<DISTORTION_T>::computeReprojectionError(
 /// \return true on success
 template<typename DISTORTION_T>
 bool PinholeProjection<DISTORTION_T>::estimateTransformation(
-    const GridCalibrationTargetObservation & obs,
+    const ObservationInterface & obs,
     sm::kinematics::Transformation & out_T_t_c) const {
 
   std::vector<cv::Point2f> Ms;

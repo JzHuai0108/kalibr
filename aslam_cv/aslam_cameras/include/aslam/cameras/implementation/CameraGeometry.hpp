@@ -498,7 +498,7 @@ namespace aslam {
     /// \brief estimate the transformation of the camera with respect to the calibration target
     template<typename P, typename S, typename M>
     bool CameraGeometry<P, S, M>::estimateTransformation(
-        const GridCalibrationTargetObservation & obs,
+        const ObservationInterface & obs,
         sm::kinematics::Transformation & out_T_t_c) const {
       return _projection.estimateTransformation(obs, out_T_t_c);
     }

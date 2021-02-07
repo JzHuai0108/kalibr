@@ -56,3 +56,42 @@ def testVimapCsvReader():
         print('First frame {}'.format(targetObservations[0]))
         print('Last frame {}'.format(targetObservations[-1]))
 
+def testPnPObservation():
+    import aslam_cv as acv
+    import numpy as np
+    l = [np.random.rand(3), np.random.rand(3), np.random.rand(3)]
+    o = [np.random.rand(2), np.random.rand(2), np.random.rand(2)]
+    i = [1, 2, 3]
+
+    stamp = acv.Time(100.0)
+    T_t_c = sm.Transformation(np.array([0.5, 0.5, -0.5, 0.5]), np.array([4, 5, 6]))
+
+    obs = acv.PnPObservation()
+    a = obs.getCornersTargetFrame()
+    b = obs.getCornersImageFrame()
+    c = obs.getCornersIdx()
+    assert len(a) == 0
+    assert len(b) == 0
+    assert len(c) == 0
+    assert not obs.hasSuccessfulObservation()
+
+    obs.setCornersTargetFrame(np.array(l))
+    obs.setCornersImageFrame(np.array(o))
+    obs.setCornersIdx(np.array(i))
+    obs.setTime(stamp)
+    obs.set_T_t_c(T_t_c)
+
+    a = obs.getCornersTargetFrame()
+    b = obs.getCornersImageFrame()
+    c = obs.getCornersIdx()
+    d = obs.time()
+    e = obs.T_t_c()
+
+    assert a.shape[0] == len(l) and a.shape[1] == 3
+    assert b.shape[0] == len(o) and b.shape[1] == 2
+    assert c.shape[0] == len(i)
+    assert abs(d.toSec() - stamp.toSec()) < 1e-8
+    residual = e.inverse() * T_t_c
+    assert np.allclose(residual.t(), np.array([0, 0, 0]))
+    assert np.allclose(residual.q(), np.array([0, 0, 0, 1]))
+    assert obs.hasSuccessfulObservation()

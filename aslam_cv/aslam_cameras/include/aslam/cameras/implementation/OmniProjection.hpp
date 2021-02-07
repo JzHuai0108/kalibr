@@ -869,7 +869,7 @@ size_t OmniProjection<DISTORTION_T>::computeReprojectionError(
 /// https://github.com/hengli/camodocal
 template<typename DISTORTION_T>
 bool OmniProjection<DISTORTION_T>::estimateTransformation(
-    const GridCalibrationTargetObservation & obs,
+    const ObservationInterface & obs,
     sm::kinematics::Transformation & out_T_t_c) const {
   using detail::square;
   std::vector<cv::Point2f> Ms;

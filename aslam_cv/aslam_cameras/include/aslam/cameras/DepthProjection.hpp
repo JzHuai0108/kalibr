@@ -126,7 +126,7 @@ class DepthProjection {
   ///        the camera frame to the target frame
   /// \return true on success
   bool estimateTransformation(
-      const GridCalibrationTargetObservation & /* obs */,
+      const ObservationInterface & /* obs */,
       sm::kinematics::Transformation & /* out_T_t_c */) const {
     return false;
   }

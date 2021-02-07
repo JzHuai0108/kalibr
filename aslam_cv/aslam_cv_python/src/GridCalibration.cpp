@@ -132,8 +132,9 @@ boost::python::tuple imageGridPoint(
 }
 
 /// \brief get all (observed) corners in target coordinates (order matches getCornersImageFrame)
+template <typename FrameObservation>
 Eigen::MatrixXd getCornersTargetFrame(
-    aslam::cameras::GridCalibrationTargetObservation * frame) {
+    FrameObservation * frame) {
   // Get the corners in the target frame
   std::vector<cv::Point3f> targetCorners;
   unsigned int numCorners = frame->getCornersTargetFrame(targetCorners);
@@ -160,8 +161,8 @@ Eigen::MatrixXd getAllCornersTargetFrame(
 }
 
 /// \brief get all corners in image frame coordinates (order matches getObservedTargetFrame)
-Eigen::MatrixXd getCornersImageFrame(
-    aslam::cameras::GridCalibrationTargetObservation * frame) {
+template <typename FrameObservation>
+Eigen::MatrixXd getCornersImageFrame(FrameObservation * frame) {
   // Get the corners in the image frame
   std::vector<cv::Point2f> imageCorners;
   unsigned int numCorners = frame->getCornersImageFrame(imageCorners);
@@ -178,7 +179,9 @@ Eigen::MatrixXd getCornersImageFrame(
 }
 
 /// \brief get all corners in image frame coordinates (order matches getObservedTargetFrame)
-Eigen::MatrixXd getCornerReprojection(aslam::cameras::GridCalibrationTargetObservation * frame, const boost::shared_ptr<aslam::cameras::CameraGeometryBase> cameraGeometry) {
+template <typename FrameObservation>
+Eigen::MatrixXd getCornerReprojection(FrameObservation *frame, 
+    const boost::shared_ptr<aslam::cameras::CameraGeometryBase> cameraGeometry) {
   // Get the corners in the image frame
   std::vector<cv::Point2f> cornersReproj;
   unsigned int numCorners = frame->getCornerReprojection(cameraGeometry, cornersReproj);
@@ -212,8 +215,8 @@ Eigen::MatrixXd projectATargetPoint(aslam::cameras::GridCalibrationTargetObserva
 }
 
 /// \brief get the point index of all (observed) corners (order corresponds to the output of getCornersImageFrame and getCornersTargetFrame)
-Eigen::VectorXi getCornersIdx(
-    aslam::cameras::GridCalibrationTargetObservation * frame) {
+template <typename FrameObservation>
+Eigen::VectorXi getCornersIdx(FrameObservation* frame) {
   // Get the corners in the image frame
   std::vector<unsigned int> cornersIdx;
   unsigned int numCorners = frame->getCornersIdx(cornersIdx);
@@ -315,7 +318,30 @@ void exportGridCalibration() {
 
   GridCalibrationTargetBase::Ptr (GridCalibrationTargetObservation::*target)() = &GridCalibrationTargetObservation::target;
 
-  class_<GridCalibrationTargetObservation,
+  class_<ObservationInterface, boost::shared_ptr<ObservationInterface>, boost::noncopyable>("ObservationInterface", boost::python::no_init)
+    .def("getCornersTargetFrame", &ObservationInterface::getCornersTargetFrame, "Get the list of observed landmarks")
+    .def("getCornersImageFrame", &ObservationInterface::getCornersImageFrame, "Get the list of image observations")
+    .def("getCornersIdx", &ObservationInterface::getCornersIdx, "Get the list of IDs of observed landmarks")
+    .def_pickle(sm::python::pickle_suite<ObservationInterface>())
+    ;
+  
+  class_<PnPObservation, bases<ObservationInterface>, boost::shared_ptr<PnPObservation> >("PnPObservation", init<>())
+    .def("getCornersTargetFrame", &getCornersTargetFrame<PnPObservation>)
+    .def("getCornersImageFrame", &getCornersImageFrame<PnPObservation>)
+    .def("getCornersIdx", &getCornersIdx<PnPObservation>)
+    .def("getCornerReprojection", &getCornerReprojection<PnPObservation>)
+    .def("setCornersTargetFrame", &PnPObservation::setCornersTargetFrame)
+    .def("setCornersImageFrame", &PnPObservation::setCornersImageFrame)
+    .def("setCornersIdx", &PnPObservation::setCornersIdx)
+    .def("hasSuccessfulObservation",  &PnPObservation::hasSuccessfulObservation)
+    .def("T_t_c", &PnPObservation::T_t_c, return_value_policy<copy_const_reference>())
+    .def("set_T_t_c", &PnPObservation::set_T_t_c)
+    .def("time", &PnPObservation::time)
+    .def("setTime", &PnPObservation::setTime)
+    .def_pickle(sm::python::pickle_suite<PnPObservation>())
+    ;
+
+  class_<GridCalibrationTargetObservation, bases<ObservationInterface>,
           boost::shared_ptr<GridCalibrationTargetObservation> >(
           "GridCalibrationTargetObservation",
       init<GridCalibrationTargetBase::Ptr>("GridCalibrationTargetObservation(GridCalibrationTarget::Ptr target)"))
@@ -325,10 +351,10 @@ void exportGridCalibration() {
 
     //old fct: use getCornersTargetFrame / getCornersImageFrame instead (makes the distinction between april and normal tags)
     //  .def("points", &GridCalibrationTargetObservation::points)
-    .def("getCornersTargetFrame", &getCornersTargetFrame)
-    .def("getCornersImageFrame", &getCornersImageFrame)
-    .def("getCornersIdx", &getCornersIdx)
-    .def("getCornerReprojection", &getCornerReprojection)
+    .def("getCornersTargetFrame", &getCornersTargetFrame<GridCalibrationTargetObservation>)
+    .def("getCornersImageFrame", &getCornersImageFrame<GridCalibrationTargetObservation>)
+    .def("getCornersIdx", &getCornersIdx<GridCalibrationTargetObservation>)
+    .def("getCornerReprojection", &getCornerReprojection<GridCalibrationTargetObservation>)
     .def("projectATargetPoint", &projectATargetPoint)
     .def("getAllCornersTargetFrame", &getAllCornersTargetFrame)
     .def("getImage", &getImage)

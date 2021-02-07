@@ -840,7 +840,7 @@ size_t DoubleSphereProjection<DISTORTION_T>::computeReprojectionError(
 /// https://github.com/hengli/camodocal
 template<typename DISTORTION_T>
 bool DoubleSphereProjection<DISTORTION_T>::estimateTransformation(
-    const GridCalibrationTargetObservation & obs,
+    const ObservationInterface & obs,
     sm::kinematics::Transformation & out_T_t_c) const {
   using detail::square;
   std::vector<cv::Point2f> Ms;

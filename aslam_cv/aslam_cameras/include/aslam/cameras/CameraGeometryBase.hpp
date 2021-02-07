@@ -19,6 +19,7 @@ namespace aslam {
 class FrameBase;
 namespace cameras {
 
+class ObservationInterface;
 class GridCalibrationTargetObservation;
 
 SM_DEFINE_ID (CameraId);
@@ -96,7 +97,7 @@ class CameraGeometryBase {
   ///        the camera frame to the target frame
   /// \return true on success
   virtual bool estimateTransformation(
-      const GridCalibrationTargetObservation & obs,
+      const ObservationInterface & obs,
       sm::kinematics::Transformation & out_T_t_c) const = 0;
 
   /// \brief The width of the underlying image
