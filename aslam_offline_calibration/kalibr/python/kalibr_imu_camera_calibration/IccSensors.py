@@ -328,7 +328,7 @@ class IccCamera():
         pose.initPoseSplineSparse(times, curve, knots, 1e-4)
         return pose
     
-    def addDesignVariables(self, problem, noExtrinsics=True, noTimeCalibration=True, baselinedv_group_id=ic.HELPER_GROUP_ID):
+    def addDesignVariables(self, problem, estimateParameters, noExtrinsics=True, baselinedv_group_id=ic.HELPER_GROUP_ID):
         # Add the calibration design variables.
         active = not noExtrinsics
         self.T_c_b_Dv = aopt.TransformationDv(self.T_extrinsic, rotationActive=active, translationActive=active)
@@ -337,9 +337,44 @@ class IccCamera():
         
         # Add the time delay design variable.
         self.cameraTimeToImuTimeDv = aopt.Scalar(0.0)
-        self.cameraTimeToImuTimeDv.setActive( not noTimeCalibration )
+        self.cameraTimeToImuTimeDv.setActive(estimateParameters['timeOffset'])
         problem.addDesignVariable(self.cameraTimeToImuTimeDv, ic.CALIBRATION_GROUP_ID)
-        
+
+        self.camera.dv.setActive(
+            estimateParameters['intrinsics'],
+            estimateParameters['distortion'],
+            estimateParameters['shutter'])
+        # add the camera design variables last for optimal sparsity patterns.
+        problem.addDesignVariable(self.camera.dv.shutterDesignVariable(), ic.CALIBRATION_GROUP_ID)
+        problem.addDesignVariable(self.camera.dv.projectionDesignVariable(), ic.CALIBRATION_GROUP_ID)
+        problem.addDesignVariable(self.camera.dv.distortionDesignVariable(), ic.CALIBRATION_GROUP_ID)
+
+    def __isRollingShutter(self):
+        return self.camera.shutterType == acv.RollingShutter
+
+    def generateIntrinsicsInitialGuess(self):
+        """
+        Get an initial guess for the camera geometry (intrinsics, distortion). Distortion is typically left as 0,0,0,0.
+        The parameters of the geometryModel are updated in place.
+        """
+        if self.__isRollingShutter():
+            resolution = self.camConfig.getResolution()
+            sensorRows = resolution[1]
+            frameRate = self.camConfig.getUpdateRate()
+            self.camera.geometry.shutter().setParameters(np.array([1.0 / (frameRate * float(sensorRows))]))
+            print('After initializing line delay, projection, distortion, and shutter parameters {}'.format(
+                self.camera.geometry.getParameters(True, True, True).T))
+
+    def computeCameraPoses(self):
+        """Estimate the pose of the camera with a PnP solver. Call after initializing the intrinsics"""
+        # estimate and set T_c in the observations
+        for idx, observation in enumerate(self.targetObservations):
+            (success, T_t_c) = self.camera.geometry.estimateTransformation(observation)
+            if success:
+                observation.set_T_t_c(T_t_c)
+            else:
+                sm.logWarn("Could not estimate T_t_c for observation at index {0}".format(idx))
+
     def addCameraErrorTerms(self, problem, poseSplineDv, T_cN_b, blakeZissermanDf=0.0, timeOffsetPadding=0.0):
         print
         print "Adding camera error terms ({0})".format(self.dataset.topic)
@@ -360,15 +395,7 @@ class IccCamera():
             #we need to make sure that we dont add data outside the spline definition
             if frameTimeScalar <= poseSplineDv.spline().t_min() or frameTimeScalar >= poseSplineDv.spline().t_max():
                 continue
-            
-            T_w_b = poseSplineDv.transformationAtTime(frameTime, timeOffsetPadding, timeOffsetPadding)
-            T_b_w = T_w_b.inverse()
 
-            #calibration target coords to camera N coords
-            #T_b_w: from world to imu coords
-            #T_cN_b: from imu to camera N coords
-            T_c_w = T_cN_b  * T_b_w
-            
             #get the image and target points corresponding to the frame
             imageCornerPoints =  np.array( obs.getCornersImageFrame() ).T
             targetCornerPoints = np.array( obs.getCornersTargetFrame() ).T
@@ -376,11 +403,12 @@ class IccCamera():
             #setup an aslam frame (handles the distortion)
             frame = self.camera.frameType()
             frame.setGeometry(self.camera.geometry)
+            # frame.setTime(acv.Time(frameTimeScalar))
             
             #corner uncertainty
             R = np.eye(2) * self.cornerUncertainty * self.cornerUncertainty
             invR = np.linalg.inv(R)
-            
+
             for pidx in range(0,imageCornerPoints.shape[1]):
                 #add all image points
                 k = self.camera.keypointType()
@@ -390,12 +418,36 @@ class IccCamera():
             
             reprojectionErrors=list()
             for pidx in range(0,imageCornerPoints.shape[1]):
+                keypoint_time = self.camera.dv.keypointTime(frameTime, imageCornerPoints[:, pidx])
+
+                # from body at t to world transformation.
+                T_w_bt = poseSplineDv.transformationAtTime(
+                    keypoint_time,
+                    timeOffsetPadding,
+                    timeOffsetPadding)
+                T_bt_w = T_w_bt.inverse()
+                T_ct_w = T_cN_b * T_bt_w
+
                 #add all target points
                 targetPoint = np.insert( targetCornerPoints.transpose()[pidx], 3, 1)
-                p = T_c_w *  aopt.HomogeneousExpression( targetPoint )
-             
+                p_t = T_ct_w *  aopt.HomogeneousExpression( targetPoint )
+
                 #build and append the error term
-                rerr = error_t(frame, pidx, p)
+                if (self.__isRollingShutter()):
+                    rerr = self.camera.reprojectionErrorAdaptiveCovariance(
+                        frame,
+                        pidx,
+                        p_t,
+                        self.camera.dv,
+                        poseSplineDv
+                    )
+                else:
+                    rerr = self.camera.reprojectionError(
+                        frame,
+                        pidx,
+                        p_t,
+                        self.camera.dv
+                    )
                 
                 #add blake-zisserman m-estimator
                 if blakeZissermanDf>0.0:
@@ -596,7 +648,7 @@ class IccCameraChain():
     def getResultTimeShift(self, camNr):
         return self.camList[camNr].cameraTimeToImuTimeDv.toScalar() + self.camList[camNr].timeshiftCamToImuPrior
     
-    def addDesignVariables(self, problem, noTimeCalibration = True, noChainExtrinsics = True):
+    def addDesignVariables(self, problem, estimateParameters):
         #add the design variables (T(R,t) & time)  for all induvidual cameras
         for camNr, cam in enumerate( self.camList ):
             #the first "baseline" dv is between the imu and cam0
@@ -604,9 +656,9 @@ class IccCameraChain():
                 noExtrinsics = False
                 baselinedv_group_id = ic.CALIBRATION_GROUP_ID
             else:
-                noExtrinsics = noChainExtrinsics
+                noExtrinsics = not estimateParameters['chainExtrinsics']
                 baselinedv_group_id = ic.HELPER_GROUP_ID
-            cam.addDesignVariables(problem, noExtrinsics, noTimeCalibration, baselinedv_group_id=baselinedv_group_id)
+            cam.addDesignVariables(problem, estimateParameters, noExtrinsics, baselinedv_group_id=baselinedv_group_id)
     
     #add the reprojection error terms for all cameras in the chain
     def addCameraChainErrorTerms(self, problem, poseSplineDv, blakeZissermanDf=-1, timeOffsetPadding=0.0):

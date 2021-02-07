@@ -89,7 +89,7 @@ Design variables
 ```
 landmark_w_dv: aopt.HomogeneousPointDv (by default inactive)
 __poseSpline_dv: asp.BSplinePoseDesignVariable
-__camera_dv:
+__camera_dv: The camera design variables are created by cameraModel.designVariable(self.geometry). The camera design variables are exported to python by exportCameraDesignVariables.
     projection: DesignVariableAdapter<projection_t>
     distortion: DesignVariableAdapter<distortion_t>
     shutter: DesignVariableAdapter<shutter_t>

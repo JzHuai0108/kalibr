@@ -77,7 +77,11 @@ def parseArgs():
     groupCam.add_argument('--recompute-camera-chain-extrinsics',  action='store_true', dest='recompute_chain_extrinsics', \
                           help='Recompute the camera chain extrinsics. This option is exclusively recommended for debugging purposes in order to identify problems with the camera chain extrinsics.')
     groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma', help='Standard deviation of the distribution of reprojected corner points [px]. (default: %(default)s)', required=False)
-    
+    groupCam.add_argument('--estimate-intrinsics', action='store_true', dest='estimate_intrinsics', help='Enable the intrinsics calibration', required=False)
+    groupCam.add_argument('--estimate-distortion', action='store_true', dest='estimate_distortion', help='Enable the distortion calibration', required=False)
+    groupCam.add_argument('--estimate-line-delay', action='store_true', dest='estimate_line_delay',
+                          help='Enable the line delay calibration', required=False)
+
     groupImu = parser.add_argument_group('IMU configuration')
     groupImu.add_argument('--imu', dest='imu_yamls', nargs='+', help='Yaml files holding the IMU noise parameters. The first IMU will be the reference IMU.', required=True, action=Once)
     groupImu.add_argument('--imu-delay-by-correlation', action='store_true', dest='estimate_imu_delay', \
@@ -172,9 +176,14 @@ def main():
     chain = kc.CameraChainParameters(parsed.chain_yaml)      
     chain.printDetails()   
     camChain = sens.IccCameraChain(chain, targetConfig, parsed)
-
+    config = IccCalibratorConfiguration()
+    config.estimateParameters['timeOffset'] = not parsed.no_time
+    config.estimateParameters['chainExtrinsics'] = parsed.recompute_chain_extrinsics
+    config.estimateParameters['shutter'] = parsed.estimate_line_delay
+    config.estimateParameters['intrinsics'] = parsed.estimate_intrinsics
+    config.estimateParameters['distortion'] = parsed.estimate_distortion
     #create a calibrator instance
-    iCal = IccCalibrator()
+    iCal = IccCalibrator(config)
 
     #register sensors with calibrator
     iCal.registerCamChain(camChain)

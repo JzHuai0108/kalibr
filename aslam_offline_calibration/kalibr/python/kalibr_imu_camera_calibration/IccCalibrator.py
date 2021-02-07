@@ -16,6 +16,11 @@ np.set_printoptions(suppress=True)
 CALIBRATION_GROUP_ID = 0
 HELPER_GROUP_ID = 1
 
+class IccCalibratorConfiguration(object):
+    estimateParameters = {'shutter': False, 'intrinsics': False, 'distortion': False, 'timeOffset': False,
+                          'chainExtrinsics': False, 'gravityLength': False, 'pose': True, 'landmarks': False}
+    initialGravityEstimate = np.array([0.0,9.81,0.0])
+
 def addSplineDesignVariables(problem, dvc, setActive=True, group_id=HELPER_GROUP_ID):
     for i in range(0,dvc.numDesignVariables()):
         dv = dvc.designVariable(i)
@@ -23,20 +28,20 @@ def addSplineDesignVariables(problem, dvc, setActive=True, group_id=HELPER_GROUP
         problem.addDesignVariable(dv, group_id)
 
 class IccCalibrator(object):
-    def __init__(self):
+    def __init__(self, config):
         self.ImuList = []
+        self.__config = config
 
-    def initDesignVariables(self, problem, poseSpline, noTimeCalibration, noChainExtrinsics=True, \
-                            estimateGravityLength=False, initialGravityEstimate=np.array([0.0,9.81,0.0])):        
+    def initDesignVariables(self, problem, poseSpline):
         # Initialize the system pose spline (always attached to imu0) 
         self.poseDv = asp.BSplinePoseDesignVariable( poseSpline )
         addSplineDesignVariables(problem, self.poseDv)
 
         # Add the calibration target orientation design variable. (expressed as gravity vector in target frame)
-        if estimateGravityLength:
-            self.gravityDv = aopt.EuclideanPointDv( initialGravityEstimate )
+        if self.__config.estimateParameters['gravityLength']:
+            self.gravityDv = aopt.EuclideanPointDv( self.__config.initialGravityEstimate )
         else:
-            self.gravityDv = aopt.EuclideanDirection( initialGravityEstimate )
+            self.gravityDv = aopt.EuclideanDirection( self.__config.initialGravityEstimate )
         self.gravityExpression = self.gravityDv.toExpression()  
         self.gravityDv.setActive( True )
         problem.addDesignVariable(self.gravityDv, HELPER_GROUP_ID)
@@ -46,7 +51,7 @@ class IccCalibrator(object):
             imu.addDesignVariables( problem )
         
         #Add all DVs for the camera chain    
-        self.CameraChain.addDesignVariables( problem, noTimeCalibration, noChainExtrinsics )
+        self.CameraChain.addDesignVariables( problem, self.__config.estimateParameters )
 
     def addPoseMotionTerms(self, problem, tv, rv):
         wt = 1.0/tv;
@@ -72,8 +77,6 @@ class IccCalibrator(object):
                       blakeZisserCam=-1,
                       huberAccel=-1,
                       huberGyro=-1,
-                      noTimeCalibration=False,
-                      noChainExtrinsics=True,
                       maxIterations=20,
                       gyroNoiseScale=1.0,
                       accelNoiseScale=1.0,
@@ -90,7 +93,7 @@ class IccCalibrator(object):
         print "\tBlake-Zisserman on reprojection errors %s" % blakeZisserCam
         print "\tAcceleration Huber width (sigma): %f" % (huberAccel)
         print "\tGyroscope Huber width (sigma): %f" % (huberGyro)
-        print "\tDo time calibration: %s" % (not noTimeCalibration)
+        print "\tDo time calibration: %s" % (self.__config.estimateParameters['timeOffset'])
         print "\tMax iterations: %d" % (maxIterations)
         print "\tTime offset padding: %f" % (timeOffsetPadding)
 
@@ -99,15 +102,19 @@ class IccCalibrator(object):
         ## initialize camera chain
         ############################################
         #estimate the timeshift for all cameras to the main imu
-        self.noTimeCalibration = noTimeCalibration
-        if not noTimeCalibration:
+        if self.__config.estimateParameters['timeOffset']:
             for cam in self.CameraChain.camList:
                 cam.findTimeshiftCameraImuPrior(self.ImuList[0], verbose)
-        
+
+        for cam in self.CameraChain.camList:
+            cam.generateIntrinsicsInitialGuess()
+            cam.computeCameraPoses()
+
         #obtain orientation prior between main imu and camera chain (if no external input provided)
         #and initial estimate for the direction of gravity
         self.CameraChain.findOrientationPriorCameraChainToImu(self.ImuList[0])
         estimatedGravity = self.CameraChain.getEstimatedGravity()
+        self.__config.initialGravityEstimate = estimatedGravity
 
         ############################################
         ## init optimization problem
@@ -123,7 +130,7 @@ class IccCalibrator(object):
         problem = inc.CalibrationOptimizationProblem()
 
         # Initialize all design variables.
-        self.initDesignVariables(problem, poseSpline, noTimeCalibration, noChainExtrinsics, initialGravityEstimate = estimatedGravity)
+        self.initDesignVariables(problem, poseSpline)
         
         ############################################
         ## add error terms
@@ -222,7 +229,7 @@ class IccCalibrator(object):
             T_ci = self.CameraChain.getResultTrafoImuToCam(camNr)
             chain.setExtrinsicsImuToCam(camNr, T_ci)
 
-            if not self.noTimeCalibration:
+            if self.__config.estimateParameters['timeOffset']:
                 #imu to cam timeshift
                 timeshift = float(self.CameraChain.getResultTimeShift(camNr))
                 chain.setTimeshiftCamImu(camNr, timeshift)

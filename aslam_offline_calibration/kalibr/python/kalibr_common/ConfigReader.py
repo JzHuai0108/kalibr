@@ -9,7 +9,11 @@ import aslam_cv_backend as cvb
 import sm
 
 class AslamCamera(object):
-    def __init__(self, camera_model, intrinsics, dist_model, dist_coeff, resolution):
+    def __init__(self, camera_model, intrinsics, dist_model, dist_coeff, resolution, lineDelayNanos):
+        if lineDelayNanos == 0:
+            self.shutterType = cv.globalShutter
+        else:
+            self.shutterType = cv.rollingShutter
         #setup the aslam camera
         if camera_model == 'pinhole':
             focalLength = intrinsics[0:2]
@@ -25,10 +29,15 @@ class AslamCamera(object):
                                                      dist)
                 
                 self.geometry = cv.DistortedPinholeCameraGeometry(proj)
-        
+
                 self.frameType = cv.DistortedPinholeFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.DistortedPinholeReprojectionErrorSimple
+                if lineDelayNanos == 0:
+                    self.dv = cvb.DistortedPinhole.designVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.DistortedPinholeReprojectionError
+                else:
+                    self.dv = cvb.DistortedPinholeRs.designVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.DistortedPinholeRsReprojectionErrorAdaptiveCovariance
                 self.undistorterType = cv.PinholeUndistorterNoMask
                 
             elif dist_model == 'equidistant':
@@ -40,10 +49,15 @@ class AslamCamera(object):
                                                           dist)
                 
                 self.geometry = cv.EquidistantDistortedPinholeCameraGeometry(proj)
-                
                 self.frameType = cv.EquidistantDistortedPinholeFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.EquidistantDistortedPinholeReprojectionErrorSimple
+                if lineDelayNanos == 0:
+                    self.dv = cvb.EquidistantPinhole.designVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.EquidistantDistortedPinholeReprojectionError
+                else:
+                    self.dv = cvb.EquidistantPinholeRs.designVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.EquidistantDistortedPinholeRsReprojectionErrorAdaptiveCovariance
+
                 self.undistorterType = cv.EquidistantPinholeUndistorterNoMask
                 
             elif dist_model == 'fov':
@@ -54,21 +68,31 @@ class AslamCamera(object):
                                                resolution[0], resolution[1], dist)
                 
                 self.geometry = cv.FovDistortedPinholeCameraGeometry(proj)
-                
+
                 self.frameType = cv.FovDistortedPinholeFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.FovDistortedPinholeReprojectionErrorSimple
+                if lineDelayNanos == 0:
+                    self.dv = cvb.FovPinhole.designVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.FovDistortedPinholeReprojectionError
+                else:
+                    self.dv = cvb.FovPinholeRs.designVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.FovDistortedPinholeRsReprojectionErrorAdaptiveCovariance
+
                 self.undistorterType = cv.FovPinholeUndistorterNoMask
             elif dist_model == 'none':
                 proj = cv.PinholeProjection(focalLength[0], focalLength[1], 
                                             principalPoint[0], principalPoint[1], 
                                             resolution[0], resolution[1])
                 
-                self.camera = cv.PinholeCameraGeometry(proj)
-                
+                self.geometry = cv.PinholeCameraGeometry(proj)
                 self.frameType = cv.PinholeFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.PinholeReprojectionErrorSimple
+                if lineDelayNanos == 0:
+                    self.dv = cvb.PinholeCameraGeometryDesignVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.PinholeReprojectionError
+                else:
+                    self.dv = cvb.PinholeRsCameraGeometryDesignVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.PinholeRsReprojectionErrorAdaptiveCovariance
             else:
                 self.raiseError("pinhole camera model does not support distortion model '{}'".format(dist_model))
                 
@@ -87,10 +111,14 @@ class AslamCamera(object):
                                                         dist)
 
                 self.geometry = cv.DistortedOmniCameraGeometry(proj)
-                
                 self.frameType = cv.DistortedOmniFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.DistortedOmniReprojectionErrorSimple
+                if lineDelayNanos == 0:
+                    self.dv = cvb.DistortedOmniCameraGeometryDesignVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.DistortedOmniReprojectionError
+                else:
+                    self.dv = cvb.DistortedOmniRsCameraGeometryDesignVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.DistortedOmniRsReprojectionErrorAdaptiveCovariance
                 self.undistorterType = cv.OmniUndistorterNoMask
                 
             elif dist_model == 'equidistant':
@@ -104,13 +132,16 @@ class AslamCamera(object):
                                                         principalPoint[0], principalPoint[1], 
                                                         resolution[0], resolution[1], 
                                                         dist)
-                
-                
                 self.geometry = cv.EquidistantDistortedOmniCameraGeometry(proj)
-                
+
                 self.frameType = cv.DistortedOmniFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.EquidistantDistortedOmniReprojectionErrorSimple
+                if lineDelayNanos == 0:
+                    self.dv = cvb.EquidistantDistortedOmniCameraGeometryDesignVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.EquidistantDistortedOmniReprojectionError
+                else:
+                    self.dv = cvb.EquidistantDistortedOmniRsCameraGeometryDesignVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.EquidistantDistortedOmniRsReprojectionErrorAdaptiveCovariance
 
             elif dist_model == 'none':
 
@@ -119,10 +150,14 @@ class AslamCamera(object):
                                                         resolution[0], resolution[1])
 
                 self.geometry = cv.OmniCameraGeometry(proj)
-
                 self.frameType = cv.OmniFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.OmniReprojectionErrorSimple
+                if lineDelayNanos == 0:
+                    self.dv = cvb.OmniCameraGeometryDesignVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.OmniReprojectionError
+                else:
+                    self.dv = cvb.OmniRsCameraGeometryDesignVariable(self.geometry)
+                    self.reprojectionErrorType = cvb.OmniRsReprojectionErrorAdaptiveCovariance
 
             else:
                 raise RuntimeError("omni camera model does not support distortion model '{}'".format(dist_model))
@@ -137,13 +172,11 @@ class AslamCamera(object):
                 proj = cv.ExtendedUnifiedProjection(alpha_uni, beta_uni, focalLength[0], focalLength[1],
                                                     principalPoint[0], principalPoint[1],
                                                     resolution[0], resolution[1])
-
                 self.geometry = cv.ExtendedUnifiedCameraGeometry(proj)
-
+                self.dv = cvb.ExtendedUnifiedCameraGeometryDesignVariable(self.geometry)
                 self.frameType = cv.ExtendedUnifiedFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.ExtendedUnifiedReprojectionErrorSimple
-
+                self.reprojectionErrorType = cvb.ExtendedUnifiedReprojectionError
             else:
                 raise RuntimeError("camera model {} does not support distortion model '{}'".format(camera_model, dist_model))
         
@@ -159,10 +192,10 @@ class AslamCamera(object):
                                                  resolution[0], resolution[1])
 
                 self.geometry = cv.DoubleSphereCameraGeometry(proj)
-                
+                self.dv = cvb.DoubleSphereCameraGeometryDesignVariable(self.geometry)
                 self.frameType = cv.DoubleSphereFrame
                 self.keypointType = cv.Keypoint2
-                self.reprojectionErrorType = cvb.DoubleSphereReprojectionErrorSimple
+                self.reprojectionErrorType = cvb.DoubleSphereReprojectionError
             else:
                 raise RuntimeError("camera model {} does not support distortion model '{}'".format(camera_model, dist_model))
 
@@ -175,7 +208,8 @@ class AslamCamera(object):
         camera_model, intrinsics = params.getIntrinsics()
         dist_model, dist_coeff = params.getDistortion()
         resolution = params.getResolution()
-        return AslamCamera(camera_model, intrinsics, dist_model, dist_coeff, resolution)
+        lineDelayNanos = params.getLineDelayNanos()
+        return AslamCamera(camera_model, intrinsics, dist_model, dist_coeff, resolution, lineDelayNanos)
         
 
 #wrapper to ctach all KeyError exception (field missing in yaml ...)

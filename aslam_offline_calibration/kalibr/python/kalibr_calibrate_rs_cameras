@@ -36,11 +36,13 @@ cameraModels = {
     # rolling shutter
     'pinhole-radtan-rs': acvb.DistortedPinholeRs,
     'pinhole-equi-rs':   acvb.EquidistantPinholeRs,
+    'pinhole-fov-rs':    acvb.FovPinholeRs,
     'omni-radtan-rs':    acvb.DistortedOmniRs,
     # global shutter
     'pinhole-radtan':    acvb.DistortedPinhole,
     'pinhole-equi':      acvb.EquidistantPinhole,
-    'omni-radtan':       acvb.DistortedOmni
+    'pinhole-fov':       acvb.FovPinhole,
+    'omni-radtan':       acvb.DistortedOmni,
 }
 
 def __signal_exit(signal, frame):

@@ -127,8 +127,9 @@ class VimapCsvReader(object):
         for j in range(self.numVertices):
             targetObservations.append(FrameObservation())
 
-        for j in range(self.numVertices):
-            targetObservations[j].set_T_t_c(self.vertices[j].T_w_b() * self.T_imu_cN)
+        # camera pose will be initialized in calibrator by PnP.
+        # for j in range(self.numVertices):
+        #     targetObservations[j].set_T_t_c(self.vertices[j].T_w_b() * self.T_imu_cN)
 
         for keypoint in self.tracks:
             if keypoint.camera_idx != self.camera_index:
