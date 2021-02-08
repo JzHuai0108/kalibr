@@ -72,7 +72,7 @@ boost::python::tuple k2ehJk(const C * camera, Eigen::VectorXd const & k) {
 }
 
 template<typename C>
-boost::python::tuple estimateTransformation(const C * camera, aslam::cameras::GridCalibrationTargetObservation & obs)
+boost::python::tuple estimateTransformation(const C * camera, aslam::cameras::ObservationInterface &obs)
 {
   sm::kinematics::Transformation trafo;
   bool success = camera->estimateTransformation(obs, trafo);

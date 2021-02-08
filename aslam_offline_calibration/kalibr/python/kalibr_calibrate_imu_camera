@@ -202,8 +202,6 @@ def main():
                       blakeZisserCam=-1,
                       huberAccel=-1,
                       huberGyro=-1,
-                      noTimeCalibration=parsed.no_time,
-                      noChainExtrinsics=(not parsed.recompute_chain_extrinsics),
                       maxIterations=parsed.max_iter,
                       timeOffsetPadding=parsed.timeoffset_padding,
                       verbose = parsed.verbose)

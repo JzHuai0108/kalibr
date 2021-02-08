@@ -76,7 +76,7 @@ class IccCamera():
                                         imageStepping=showOneStep)
             multithreading = not (showCorners or showReproj or showOneStep)
             self.targetObservations = kc.extractCornersFromDataset(self.dataset, self.detector, multithreading=multithreading)
-        
+        self.allReprojectionErrors = []
         #an estimate of the gravity in the world coordinate frame  
         self.gravity_w = np.array([9.80655, 0., 0.])
         
@@ -403,7 +403,8 @@ class IccCamera():
             #setup an aslam frame (handles the distortion)
             frame = self.camera.frameType()
             frame.setGeometry(self.camera.geometry)
-            # frame.setTime(acv.Time(frameTimeScalar))
+            initialFrameTime = acv.Time(frameTimeScalar)
+            frame.setTime(initialFrameTime) # Timestamp for the frame is only used in computing covarianceMap for ReprojectionErrorAdaptiveCovariance.
             
             #corner uncertainty
             R = np.eye(2) * self.cornerUncertainty * self.cornerUncertainty
@@ -418,11 +419,12 @@ class IccCamera():
             
             reprojectionErrors=list()
             for pidx in range(0,imageCornerPoints.shape[1]):
-                keypoint_time = self.camera.dv.keypointTime(frameTime, imageCornerPoints[:, pidx])
+                temporalOffset = self.camera.dv.temporalOffset(imageCornerPoints[:, pidx])
+                keypointTime = frameTime + temporalOffset
 
                 # from body at t to world transformation.
                 T_w_bt = poseSplineDv.transformationAtTime(
-                    keypoint_time,
+                    keypointTime,
                     timeOffsetPadding,
                     timeOffsetPadding)
                 T_bt_w = T_w_bt.inverse()
@@ -434,7 +436,7 @@ class IccCamera():
 
                 #build and append the error term
                 if (self.__isRollingShutter()):
-                    rerr = self.camera.reprojectionErrorAdaptiveCovariance(
+                    rerr = error_t(
                         frame,
                         pidx,
                         p_t,
@@ -442,7 +444,7 @@ class IccCamera():
                         poseSplineDv
                     )
                 else:
-                    rerr = self.camera.reprojectionError(
+                    rerr = error_t(
                         frame,
                         pidx,
                         p_t,

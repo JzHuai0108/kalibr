@@ -97,6 +97,9 @@ class IccCalibrator(object):
         print "\tMax iterations: %d" % (maxIterations)
         print "\tTime offset padding: %f" % (timeOffsetPadding)
 
+        for cam in self.CameraChain.camList:
+            cam.generateIntrinsicsInitialGuess()
+            cam.computeCameraPoses()
 
         ############################################
         ## initialize camera chain
@@ -105,10 +108,6 @@ class IccCalibrator(object):
         if self.__config.estimateParameters['timeOffset']:
             for cam in self.CameraChain.camList:
                 cam.findTimeshiftCameraImuPrior(self.ImuList[0], verbose)
-
-        for cam in self.CameraChain.camList:
-            cam.generateIntrinsicsInitialGuess()
-            cam.computeCameraPoses()
 
         #obtain orientation prior between main imu and camera chain (if no external input provided)
         #and initial estimate for the direction of gravity
