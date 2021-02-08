@@ -858,6 +858,29 @@ class CameraChainParameters(ParametersBase):
                 self.raiseError("out-of-range: camera id of {0}".format(cam_id))
 
     @catch_keyerror
+    def getLineDelay(self, camNr):
+        return self.data["cam{0}".format(camNr)]["line_delay_nanoseconds"]
+
+    def setLineDelay(self, camNr, line_delay_nanos):
+        self.data["cam{0}".format(camNr)]["line_delay_nanoseconds"] = line_delay_nanos
+
+    @catch_keyerror
+    def getDistortion(self, camNr):
+        return self.data["cam{0}".format(camNr)]["distortion_model"], self.data["cam{0}".format(camNr)]["distortion_coeffs"]
+
+    def setDistortion(self, camNr, model, coeffs):
+        self.data["cam{0}".format(camNr)]["distortion_model"] = model
+        self.data["cam{0}".format(camNr)]["distortion_coeffs"] = [float(val) for val in coeffs]
+
+    @catch_keyerror
+    def getIntrinsics(self, camNr):
+        return self.data["cam{0}".format(camNr)]["camera_model"], self.data["cam{0}".format(camNr)]["intrinsics"]
+
+    def setIntrinsics(self, camNr, model, intrinsics):
+        self.data["cam{0}".format(camNr)]["camera_model"] = model
+        self.data["cam{0}".format(camNr)]["intrinsics"] = [float(val) for val in intrinsics]
+
+    @catch_keyerror
     def getCamOverlaps(self, camNr):
         self.checkCamOverlaps(camNr, self.data["cam{0}".format(camNr)]["cam_overlaps"])       
         return self.data["cam{0}".format(camNr)]["cam_overlaps"]

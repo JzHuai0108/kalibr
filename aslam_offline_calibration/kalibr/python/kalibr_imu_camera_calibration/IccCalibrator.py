@@ -105,7 +105,9 @@ class IccCalibrator(object):
         print "\tTime offset padding: %f" % (timeOffsetPadding)
 
         for cam in self.CameraChain.camList:
-            cam.generateIntrinsicsInitialGuess()
+            cam.generateIntrinsicsInitialGuess(self.__config.estimateParameters['intrinsics'],
+                                               self.__config.estimateParameters['distortion'],
+                                               self.__config.estimateParameters['shutter'])
             cam.computeCameraPoses()
 
         ############################################
@@ -239,7 +241,21 @@ class IccCalibrator(object):
                 #imu to cam timeshift
                 timeshift = float(self.CameraChain.getResultTimeShift(camNr))
                 chain.setTimeshiftCamImu(camNr, timeshift)
-             
+
+            if self.__config.estimateParameters['shutter']:
+                lineDelay = self.CameraChain.getResultLineDelay(camNr)
+                chain.setLineDelay(camNr, int(lineDelay * 1e9))
+
+            if self.__config.estimateParameters['intrinsics']:
+                model, coeffs = chain.getIntrinsics(camNr)
+                projection = self.CameraChain.getResultProjection(camNr)
+                chain.setIntrinsics(camNr, model, projection)
+
+            if self.__config.estimateParameters['distortion']:
+                model, coeffs = chain.getDistortion(camNr)
+                distortion = self.CameraChain.getResultDistortion(camNr)
+                chain.setDistortion(camNr, model, distortion)
+
         try:
             chain.writeYaml(resultFile)
         except:

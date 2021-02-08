@@ -353,12 +353,12 @@ class IccCamera():
     def __isRollingShutter(self):
         return self.camera.shutterType == acv.RollingShutter
 
-    def generateIntrinsicsInitialGuess(self):
+    def generateIntrinsicsInitialGuess(self, estimateIntrinsics, estimateDistortion, estimateLineDelay):
         """
         Get an initial guess for the camera geometry (intrinsics, distortion). Distortion is typically left as 0,0,0,0.
         The parameters of the geometryModel are updated in place.
         """
-        if self.__isRollingShutter():
+        if self.__isRollingShutter() and estimateLineDelay:
             resolution = self.camConfig.getResolution()
             sensorRows = resolution[1]
             frameRate = self.camConfig.getUpdateRate()
@@ -650,7 +650,16 @@ class IccCameraChain():
     
     def getResultTimeShift(self, camNr):
         return self.camList[camNr].cameraTimeToImuTimeDv.toScalar() + self.camList[camNr].timeshiftCamToImuPrior
-    
+
+    def getResultLineDelay(self, camNr):
+        return self.camList[camNr].camera.dv.shutterDesignVariable().value().lineDelay()
+
+    def getResultProjection(self, camNr):
+        return self.camList[camNr].camera.dv.projectionDesignVariable().value().getParameters().flatten()
+
+    def getResultDistortion(self, camNr):
+        return self.camList[camNr].camera.dv.distortionDesignVariable().value().getParameters().flatten()
+
     def addDesignVariables(self, problem, estimateParameters):
         #add the design variables (T(R,t) & time)  for all induvidual cameras
         for camNr, cam in enumerate( self.camList ):
