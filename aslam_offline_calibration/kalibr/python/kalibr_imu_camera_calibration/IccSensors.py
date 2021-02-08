@@ -77,9 +77,10 @@ class IccCamera():
             multithreading = not (showCorners or showReproj or showOneStep)
             self.targetObservations = kc.extractCornersFromDataset(self.dataset, self.detector, multithreading=multithreading)
         self.allReprojectionErrors = []
+        self.__frames = []
         #an estimate of the gravity in the world coordinate frame  
         self.gravity_w = np.array([9.80655, 0., 0.])
-        
+
     def setupCalibrationTarget(self, targetConfig, showExtraction=False, showReproj=False, imageStepping=False):
         
         #load the calibration target configuration
@@ -405,7 +406,8 @@ class IccCamera():
             frame.setGeometry(self.camera.geometry)
             initialFrameTime = acv.Time(frameTimeScalar)
             frame.setTime(initialFrameTime) # Timestamp for the frame is only used in computing covarianceMap for ReprojectionErrorAdaptiveCovariance.
-            
+            self.__frames.append(frame)
+
             #corner uncertainty
             R = np.eye(2) * self.cornerUncertainty * self.cornerUncertainty
             invR = np.linalg.inv(R)
