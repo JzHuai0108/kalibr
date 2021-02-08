@@ -113,6 +113,8 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         self.targetObservation = None
         self.allTargetCorners = None
         self.setupCalibrationTarget(targetConfig, showExtraction=False, showReproj=False, imageStepping=False)
+        self.imageWidth = self.cameraConfig.getResolution()[0]
+        self.imageHeight = self.cameraConfig.getResolution()[1]
         self.timeOffset = chain.getTimeshiftCamImu(camNr)
 
         print("IMU configuration:")
@@ -393,11 +395,11 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             print 'Naive method for state time %.9f' % state_time
         for iota in range(self.targetObservation.getTotalTargetPoint()):
             # get the initial observation
-            sm_T_w_c, isValid = getCameraPoseAt(state_time, self.poseSplineDv, self.T_imu_c0)
-            if not isValid:
+            sm_T_w_c, validPose = getCameraPoseAt(state_time, self.poseSplineDv, self.T_imu_c0)
+            if not validPose:
                 continue
-            lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) # 3x1.
-            if lastImagePoint[2, 0] == 0.0:
+            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) # 3x1.
+            if not validProjection:
                 continue
             numIter = 0  
             aborted = False 
@@ -407,10 +409,10 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 imageCornerProjected.append(lastImagePoint)
                 continue         
             while numIter < 8:
-                currTime = lastImagePoint[1, 0] * line_delay + state_time            
-                sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
-                imagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
-                if not isValid or imagePoint[2, 0] == 0.0:
+                currTime = (lastImagePoint[1, 0] - self.imageHeight * 0.5) * line_delay + state_time
+                sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
+                validProjection, imagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                if not validPose or not validProjection:
                     aborted = True
                     break
                 delta = np.absolute(lastImagePoint[1,0] - imagePoint[1,0])            
@@ -456,13 +458,12 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
         numFailedProjection = 0
         numLandmarks = self.targetObservation.getTotalTargetPoint()
         for iota in range(numLandmarks):
-            sm_T_w_c, isValid = getCameraPoseAt(state_time, self.poseSplineDv, self.T_imu_c0)
-
-            lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) # 3x1.
-            if not isValid:
+            sm_T_w_c, validPose = getCameraPoseAt(state_time, self.poseSplineDv, self.T_imu_c0)
+            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) # 3x1.
+            if not validPose:
                 numOutOfBound += 1
                 continue
-            if lastImagePoint[2, 0] == 0.0:
+            if not validProjection:
                 numFailedProjection += 1
                 continue
             numIter = 0
@@ -483,29 +484,29 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
 
                 # compute g(y_0)
-                currTime = lastImagePoint[1, 0] * line_delay + state_time
-                sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
+                currTime = (lastImagePoint[1, 0] - self.imageHeight * 0.5) * line_delay + state_time
+                sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
 
-                imagePoint0 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
-                if not isValid:
+                validProjection, imagePoint0 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                if not validPose:
                     numOutOfBound += 1
                     aborted = True
                     break
-                if imagePoint0[2, 0] == 0.0:
+                if not validProjection:
                     numFailedProjection += 1
                     aborted = True
                     break
                 # compute Jacobian of g(y) relative to y at y_0
                 eps = 1
-                currTime = (lastImagePoint[1, 0] + eps) * line_delay + state_time
-                sm_T_w_cx, isValid = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
+                currTime = (lastImagePoint[1, 0] + eps - self.imageHeight * 0.5) * line_delay + state_time
+                sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, self.T_imu_c0)
 
-                imagePoint1 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
-                if not isValid:
+                validProjection, imagePoint1 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                if not validPose:
                     numOutOfBound += 1
                     aborted = True
                     break
-                if imagePoint0[2, 0] == 0.0:
+                if not validProjection:
                     numFailedProjection += 1
                     aborted = True
                     break
@@ -526,9 +527,11 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
                 imageCornerProjected.append(imagePoint0)
                 xnoise = gauss(0.0, reprojectionSigma)
                 ynoise = gauss(0.0, reprojectionSigma)
-                frameKeypoints.append((iota, kpId, imagePoint0[0, 0] + xnoise, imagePoint0[1, 0] + ynoise, 12))
-                imageCornerProjectedOffset.append(np.linalg.norm([initialImagePoint[0, 0] - imagePoint0[0, 0] - xnoise,
-                                                                  initialImagePoint[1, 0] - imagePoint0[1, 0] - ynoise]))
+                noisyPoint = [noisyValue(imagePoint0[0, 0], self.imageWidth, xnoise),
+                              noisyValue(imagePoint0[1, 0], self.imageHeight, ynoise)]
+                frameKeypoints.append((iota, kpId, noisyPoint[0], noisyPoint[1], 12))
+                imageCornerProjectedOffset.append(np.linalg.norm([initialImagePoint[0, 0] - noisyPoint[0],
+                                                                  initialImagePoint[1, 0] - noisyPoint[1]]))
                 kpId += 1
         if numOutOfBound > 0 or numFailedProjection > numLandmarks / 2:
             print("  For frame at {:.6f} s, {} out of time bound landmarks, {} failed to project landmarks".format( \
@@ -536,3 +539,14 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
 
         assert kpId == len(imageCornerProjected)
         return np.array(imageCornerProjected), frameKeypoints, imageCornerProjectedOffset
+
+def noisyValue(x, upperbound, noise):
+    if x <= 1 or x >= upperbound - 1:
+        noisyx = x
+    elif x + noise < 0:
+        noisyx = x - noise
+    elif x + noise > upperbound:
+        noisyx = x - noise
+    else:
+        noisyx = x + noise
+    return noisyx
