@@ -211,7 +211,16 @@ class AslamCamera(object):
         camera_model, intrinsics = params.getIntrinsics()
         dist_model, dist_coeff = params.getDistortion()
         resolution = params.getResolution()
-        lineDelayNanos = params.getLineDelayNanos()
+        try:
+            lineDelayNanos = params.getLineDelayNanos()
+        except RuntimeError as e:
+            msg = str(e)
+            if 'missing' in msg:
+                lineDelayNanos = 0
+            else:
+                raise e
+        except:
+            raise
         return AslamCamera(camera_model, intrinsics, dist_model, dist_coeff, resolution, lineDelayNanos)
         
 

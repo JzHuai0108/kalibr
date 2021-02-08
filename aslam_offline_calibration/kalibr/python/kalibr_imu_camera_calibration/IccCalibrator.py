@@ -31,6 +31,13 @@ class IccCalibrator(object):
     def __init__(self, config):
         self.ImuList = []
         self.__config = config
+        self.CameraChain = None
+        self.poseDv = None
+        self.gravityDv = None
+        self.gravityExpression = None
+        self.noTimeCalibration = False
+        self.problem = None
+        self.optimizer = None
 
     def initDesignVariables(self, problem, poseSpline):
         # Initialize the system pose spline (always attached to imu0) 
@@ -105,6 +112,7 @@ class IccCalibrator(object):
         ## initialize camera chain
         ############################################
         #estimate the timeshift for all cameras to the main imu
+        self.noTimeCalibration = not self.__config.estimateParameters['timeOffset']
         if self.__config.estimateParameters['timeOffset']:
             for cam in self.CameraChain.camList:
                 cam.findTimeshiftCameraImuPrior(self.ImuList[0], verbose)
@@ -149,8 +157,7 @@ class IccCalibrator(object):
         # Add the pose motion terms.
         if doPoseMotionError:
             self.addPoseMotionTerms(problem, mrTranslationVariance, mrRotationVariance)
-        
-        # Add a gravity prior
+
         self.problem = problem
 
 

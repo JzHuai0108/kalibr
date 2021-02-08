@@ -101,11 +101,10 @@ class VimapCsvReaderIterator(object):
 
 
 class VimapCsvReader(object):
-    def __init__(self, folder, topic, T_cN_imu, from_to=None, perform_synchronization=False):
+    def __init__(self, folder, topic, from_to=None, perform_synchronization=False):
         self.folder = folder
         self.camera_index = int(topic[topic.find('image_raw') - 2])
         self.topic = topic
-        self.T_imu_cN = T_cN_imu.inverse() # sm.Transformation().
         self.from_to = from_to
         self.numCameras = -1
         self.numVertices = -1
@@ -127,9 +126,7 @@ class VimapCsvReader(object):
         for j in range(self.numVertices):
             targetObservations.append(FrameObservation())
 
-        # camera pose will be initialized in calibrator by PnP.
-        # for j in range(self.numVertices):
-        #     targetObservations[j].set_T_t_c(self.vertices[j].T_w_b() * self.T_imu_cN)
+        # camera poses for target observations will be initialized in calibrator by PnP.
 
         for keypoint in self.tracks:
             if keypoint.camera_idx != self.camera_index:

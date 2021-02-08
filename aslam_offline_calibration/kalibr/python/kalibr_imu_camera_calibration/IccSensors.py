@@ -34,11 +34,11 @@ def initImuBagDataset(bagfile, topic, from_to=None, perform_synchronization=Fals
     print "\tNumber of messages: {0}".format(len(reader.index))
     return reader
 
-def initCameraDataset(path, topic, T_cam_imu, from_to=None, perform_synchronization=False):
+def initCameraDataset(path, topic, from_to=None, perform_synchronization=False):
     if path.endswith('.bag'):
         return initCameraBagDataset(path, topic, from_to, perform_synchronization)
     else:
-        return kc.VimapCsvReader(path, topic, T_cam_imu, from_to, perform_synchronization)
+        return kc.VimapCsvReader(path, topic, from_to, perform_synchronization)
 
 def initImuDataset(path, topic, from_to=None, perform_synchronization=False):
     if path.endswith('.bag'):
@@ -295,7 +295,7 @@ class IccCamera():
         # Get the checkerboard times.
         times = np.array([obs.time().toSec()+self.timeshiftCamToImuPrior for obs in self.targetObservations ])                 
         curve = np.matrix([ pose.transformationToCurveValue( np.dot(obs.T_t_c().T(), T_c_b) ) for obs in self.targetObservations]).T
-        
+
         if np.isnan(curve).any():
             raise RuntimeError("Nans in curve values")
             sys.exit(0)
@@ -452,21 +452,21 @@ class IccCamera():
                         p_t,
                         self.camera.dv
                     )
-                
+
                 #add blake-zisserman m-estimator
                 if blakeZissermanDf>0.0:
                     mest = aopt.BlakeZissermanMEstimator( blakeZissermanDf )
                     rerr.setMEstimatorPolicy(mest)
-                
-                problem.addErrorTerm(rerr)  
+
+                problem.addErrorTerm(rerr)
                 reprojectionErrors.append(rerr)
-            
+
             allReprojectionErrors.append(reprojectionErrors)
-                        
+
             #update progress bar
             iProgress.sample()
-            
-        print "\r  Added {0} camera error terms                      ".format( len(self.targetObservations) )           
+
+        print "\r  Added error terms for {} frames                      ".format( len(self.targetObservations) )
         self.allReprojectionErrors = allReprojectionErrors
 
     def getCornersImageSample(self, poseSplineDv, T_cN_b, timeOffsetPadding = 0.0, frameIndex = 0):
@@ -555,7 +555,6 @@ class IccCameraChain():
         for camNr in range(0, chainConfig.numCameras()):
             camConfig = chainConfig.getCameraParameters(camNr)
             dataset = initCameraDataset(parsed.bagfile[0], camConfig.getRosTopic(),
-                                        chainConfig.getExtrinsicsImuToCam(camNr),
                                         parsed.bag_from_to, parsed.perform_synchronization)
             
             #create the camera

@@ -49,8 +49,7 @@ def testFrameObservation():
 
 def testVimapCsvReader():
     if os.path.isdir(vimapFolder):
-        T_cN_imu = sm.Transformation()
-        dataset = VimapCsvReader.VimapCsvReader(vimapFolder, '/cam0/image_raw', T_cN_imu, [1, 2], False)
+        dataset = VimapCsvReader.VimapCsvReader(vimapFolder, '/cam0/image_raw', [1, 2], False)
         targetObservations = dataset.getFeatureAssociations()
         print('Total frames {}'.format(dataset.numImages()))
         print('First frame {}'.format(targetObservations[0]))
