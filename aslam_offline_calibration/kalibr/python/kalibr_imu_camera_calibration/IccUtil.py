@@ -57,20 +57,8 @@ def printResults(cself, withCov=False):
 
         print
         print "Transformation T_cam{0}_imu0 (imu0 to cam{0}, T_ci): ".format(camNr)
-        if withCov and camNr==0:
-            print "\t quaternion: ", T_cam_b.q(), " +- ", cself.std_trafo_ic[0:3]
-            print "\t translation: ", T_cam_b.t(), " +- ", cself.std_trafo_ic[3:]
         print T_cam_b.T()
-        
-        if not cself.noTimeCalibration:
-            print
-            print "cam{0} to imu0 time: [s] (t_imu = t_cam + shift)".format(camNr)
-            print cself.CameraChain.getResultTimeShift(camNr),
-            
-            if withCov:
-                print " +- ", cself.std_times[camNr]
-            else:
-                print
+        cself.CameraChain.camList[camNr].printResults(cself.getEstimateParameters(), camNr)
 
     print
     for (imuNr, imu) in enumerate(cself.ImuList):
@@ -251,7 +239,8 @@ def printResultTxt(cself, stream=sys.stdout):
         if cam.targetConfig:
             cam.targetConfig.printDetails(stream)
         print >> stream, ""
-    
+        cam.printResults(cself.getEstimateParameters(), camNr, stream)
+
 	print >> stream, ""
     print >> stream, ""
     print >> stream, "IMU configuration"

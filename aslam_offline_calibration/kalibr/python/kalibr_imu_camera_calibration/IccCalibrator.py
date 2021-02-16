@@ -35,9 +35,11 @@ class IccCalibrator(object):
         self.poseDv = None
         self.gravityDv = None
         self.gravityExpression = None
-        self.noTimeCalibration = False
         self.problem = None
         self.optimizer = None
+
+    def getEstimateParameters(self):
+        return self.__config.estimateParameters
 
     def initDesignVariables(self, problem, poseSpline):
         # Initialize the system pose spline (always attached to imu0) 
@@ -114,7 +116,6 @@ class IccCalibrator(object):
         ## initialize camera chain
         ############################################
         #estimate the timeshift for all cameras to the main imu
-        self.noTimeCalibration = not self.__config.estimateParameters['timeOffset']
         if self.__config.estimateParameters['timeOffset']:
             for cam in self.CameraChain.camList:
                 cam.findTimeshiftCameraImuPrior(self.ImuList[0], verbose)
@@ -210,10 +211,16 @@ class IccCalibrator(object):
         estimator = inc.IncrementalEstimator(CALIBRATION_GROUP_ID)
         rval = estimator.addBatch(self.problem, True)    
         est_stds = np.sqrt(estimator.getSigma2Theta().diagonal())
-        
+
         #split and store the variance
         self.std_trafo_ic = np.array(est_stds[0:6])
         self.std_times = np.array(est_stds[6:])
+
+        cam_std_start_index = 0
+        for cam_id, cam in enumerate(self.CameraChain.camList):
+            num_associated_stds = cam.associateVariableStds(
+                est_stds, cam_std_start_index, self.__config.estimateParameters, cam_id)
+            cam_std_start_index += num_associated_stds
     
     def saveImuSetParametersYaml(self, resultFile):
         imuSetConfig = kc.ImuSetParameters(resultFile, True)

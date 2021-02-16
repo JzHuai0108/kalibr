@@ -80,6 +80,8 @@ class IccCamera():
         self.__frames = []
         #an estimate of the gravity in the world coordinate frame  
         self.gravity_w = np.array([9.80655, 0., 0.])
+        self.cameraId = -1
+        self.variable_stds = {}
 
     def setupCalibrationTarget(self, targetConfig, showExtraction=False, showReproj=False, imageStepping=False):
         
@@ -350,6 +352,90 @@ class IccCamera():
         problem.addDesignVariable(self.camera.dv.projectionDesignVariable(), ic.CALIBRATION_GROUP_ID)
         problem.addDesignVariable(self.camera.dv.distortionDesignVariable(), ic.CALIBRATION_GROUP_ID)
 
+    def associateVariableStds(self, est_stds, cam_std_start_index, estimateParameters, cam_id):
+        variable_stds = {}
+        start_index = cam_std_start_index
+        if cam_id == 0:
+            variable_stds["q"] = est_stds[start_index : start_index + 3]
+            variable_stds["r"] = est_stds[start_index + 3 : start_index + 6]
+            start_index += 6
+        else:
+            if estimateParameters['chainExtrinsics']:
+                variable_stds["q"] = est_stds[start_index : start_index + 3]
+                variable_stds["r"] = est_stds[start_index + 3 : start_index + 6]
+                start_index += 6
+        if estimateParameters['timeOffset']:
+            variable_stds["timeOffset"] = est_stds[start_index]
+            start_index += 1
+        if estimateParameters['shutter']:
+            variable_stds["shutter"] = est_stds[start_index]
+            start_index += 1
+        if estimateParameters['intrinsics']:
+            variable_stds["intrinsics"] = \
+                est_stds[start_index : start_index + self.camera.geometry.minimalDimensionsProjection()]
+            start_index += self.camera.geometry.minimalDimensionsProjection()
+        if estimateParameters['distortion']:
+            variable_stds["distortion"] = \
+                est_stds[start_index : start_index + self.camera.geometry.minimalDimensionsDistortion()]
+            start_index += self.camera.geometry.minimalDimensionsDistortion()
+        self.cameraId = cam_id
+        self.variable_stds = variable_stds
+        return start_index - cam_std_start_index
+
+    def getResultTimeShift(self):
+        return self.cameraTimeToImuTimeDv.toScalar() + self.timeshiftCamToImuPrior
+
+    def getResultLineDelay(self):
+        return self.camera.dv.shutterDesignVariable().value().lineDelay()
+
+    def getResultProjection(self):
+        return self.camera.dv.projectionDesignVariable().value().getParameters().flatten()
+
+    def getResultDistortion(self):
+        return self.camera.dv.distortionDesignVariable().value().getParameters().flatten()
+
+    def printResults(self, estimateParameters, cameraId, stream = sys.stdout):
+        withCov = len(self.variable_stds) > 0
+        if cameraId == 0:
+            print >> stream, "T_Cam0_Imu:"
+        else:
+            print >> stream, "T_Cam{}_Cam{}".format(cameraId, cameraId - 1)
+
+        T_cam_b = sm.Transformation(self.T_c_b_Dv.T())
+        if withCov:
+            print >> stream, "\t quaternion: {} +- {}".format(T_cam_b.q(), self.variable_stds["q"])
+            print >> stream, "\t translation: {} +- {}".format(T_cam_b.t(), self.variable_stds["r"])
+        else:
+            print >> stream, "\t quaternion: {}".format(T_cam_b.q())
+            print >> stream, "\t translation: {}".format(T_cam_b.t())
+
+        if estimateParameters['timeOffset']:
+            print >> stream, "\n"
+            msg = "cam{} to imu0 time: [s] (t_imu = t_cam + shift) {}".format(cameraId, self.getResultTimeShift())
+            if withCov:
+                msg += " +- {}".format(self.variable_stds["timeOffset"])
+            print >> stream, msg
+
+        if estimateParameters['shutter']:
+            print >> stream, "\n"
+            msg = "cam{} line delay: [s] {}".format(cameraId, self.getResultLineDelay())
+            if withCov:
+                msg += " +- {}".format(self.variable_stds["shutter"])
+            print >> stream, msg
+
+        if estimateParameters['intrinsics']:
+            print >> stream, "\n"
+            msg = "cam{} intrinsics: [s] {}".format(cameraId, self.getResultProjection())
+            if withCov:
+                msg += " +- {}".format(self.variable_stds["intrinsics"])
+            print >> stream, msg
+        if estimateParameters['distortion']:
+            print >> stream, "\n"
+            msg = "cam{} distortion: [s] {}".format(cameraId, self.getResultDistortion())
+            if withCov:
+                msg += " +- {}".format(self.variable_stds["distortion"])
+            print >> stream, msg
+
     def __isRollingShutter(self):
         return self.camera.shutterType == acv.RollingShutter
 
@@ -434,7 +520,7 @@ class IccCamera():
 
                 #add all target points
                 targetPoint = np.insert( targetCornerPoints.transpose()[pidx], 3, 1)
-                p_t = T_ct_w *  aopt.HomogeneousExpression( targetPoint )
+                p_t = T_ct_w * aopt.HomogeneousExpression( targetPoint )
 
                 #build and append the error term
                 if (self.__isRollingShutter()):
@@ -649,16 +735,16 @@ class IccCameraChain():
         return T_cN_imu
     
     def getResultTimeShift(self, camNr):
-        return self.camList[camNr].cameraTimeToImuTimeDv.toScalar() + self.camList[camNr].timeshiftCamToImuPrior
+        return self.camList[camNr].getResultTimeShift()
 
     def getResultLineDelay(self, camNr):
-        return self.camList[camNr].camera.dv.shutterDesignVariable().value().lineDelay()
+        return self.camList[camNr].getResultLineDelay()
 
     def getResultProjection(self, camNr):
-        return self.camList[camNr].camera.dv.projectionDesignVariable().value().getParameters().flatten()
+        return self.camList[camNr].getResultProjection()
 
     def getResultDistortion(self, camNr):
-        return self.camList[camNr].camera.dv.distortionDesignVariable().value().getParameters().flatten()
+        return self.camList[camNr].getResultDistortion()
 
     def addDesignVariables(self, problem, estimateParameters):
         #add the design variables (T(R,t) & time)  for all induvidual cameras
@@ -698,7 +784,6 @@ class IccCameraChain():
 
     def getCornersTargetSample(self, cameraIndex, frameIndex):    
         return self.camList[cameraIndex].getCornersTargetSample(frameIndex)
-
 
 #IMU
 class IccImu(object):
