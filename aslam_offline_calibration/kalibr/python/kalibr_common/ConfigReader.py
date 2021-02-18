@@ -204,6 +204,7 @@ class AslamCamera(object):
 
         else:
             raise RuntimeError("Unknown camera model '{}'".format(camera_model))
+        self.geometry.shutter().setParameters(np.array([lineDelayNanos * 1e-9]))
         
     @classmethod
     def fromParameters(cls, params):
