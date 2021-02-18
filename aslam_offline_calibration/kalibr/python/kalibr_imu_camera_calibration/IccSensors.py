@@ -478,7 +478,10 @@ class IccCamera():
 
         allReprojectionErrors = list()
         error_t = self.camera.reprojectionErrorType
-        
+        resolution = self.camConfig.getResolution()
+        sensorRows = resolution[1]
+        dummyPoint = np.array([0, sensorRows / 2])
+        centerRowTemporalOffset = self.camera.dv.temporalOffset(dummyPoint)
         for obs in self.targetObservations:
             # Build a transformation expression for the time.
             frameTime = self.cameraTimeToImuTimeDv.toExpression() + obs.time().toSec() + self.timeshiftCamToImuPrior
@@ -514,7 +517,7 @@ class IccCamera():
             reprojectionErrors=list()
             for pidx in range(0,imageCornerPoints.shape[1]):
                 temporalOffset = self.camera.dv.temporalOffset(imageCornerPoints[:, pidx])
-                keypointTime = frameTime + temporalOffset
+                keypointTime = frameTime + temporalOffset - centerRowTemporalOffset
 
                 # from body at t to world transformation.
                 T_w_bt = poseSplineDv.transformationAtTime(
