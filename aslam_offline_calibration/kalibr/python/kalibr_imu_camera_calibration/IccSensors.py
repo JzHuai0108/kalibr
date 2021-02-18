@@ -76,6 +76,10 @@ class IccCamera():
                                         imageStepping=showOneStep)
             multithreading = not (showCorners or showReproj or showOneStep)
             self.targetObservations = kc.extractCornersFromDataset(self.dataset, self.detector, multithreading=multithreading)
+        numObservations = [len(obs.getCornersImageFrame()) for obs in self.targetObservations]
+        print("Extracted corners with multithreading? {}".format(multithreading))
+        hist, bin_edges = np.histogram(numObservations, bins=np.arange(0, 156, 12))
+        print("Histogram of detected landmarks in frames {}\nBin edges of #landmarks {}".format(hist, bin_edges))
         self.allReprojectionErrors = []
         self.__frames = []
         #an estimate of the gravity in the world coordinate frame  
@@ -410,41 +414,43 @@ class IccCamera():
             print >> stream, "\t translation: {}".format(T_cam_b.t())
 
         if estimateParameters['timeOffset']:
-            print >> stream, "\n"
             msg = "cam{} to imu0 time: [s] (t_imu = t_cam + shift) {}".format(cameraId, self.getResultTimeShift())
             if withCov:
                 msg += " +- {}".format(self.variable_stds["timeOffset"])
             print >> stream, msg
 
         if estimateParameters['shutter']:
-            print >> stream, "\n"
             msg = "cam{} line delay: [s] {}".format(cameraId, self.getResultLineDelay())
             if withCov:
                 msg += " +- {}".format(self.variable_stds["shutter"])
             print >> stream, msg
 
         if estimateParameters['intrinsics']:
-            print >> stream, "\n"
             msg = "cam{} intrinsics: [s] {}".format(cameraId, self.getResultProjection())
             if withCov:
                 msg += " +- {}".format(self.variable_stds["intrinsics"])
             print >> stream, msg
         if estimateParameters['distortion']:
-            print >> stream, "\n"
             msg = "cam{} distortion: [s] {}".format(cameraId, self.getResultDistortion())
             if withCov:
                 msg += " +- {}".format(self.variable_stds["distortion"])
             print >> stream, msg
 
-    def __isRollingShutter(self):
+    def isRollingShutter(self):
         return self.camera.shutterType == acv.RollingShutter
+
+    def getLineDelaySeconds(self):
+        if self.isRollingShutter():
+            return self.camera.geometry.shutter().getParameters()[0]
+        else:
+            return 0
 
     def generateIntrinsicsInitialGuess(self, estimateIntrinsics, estimateDistortion, estimateLineDelay):
         """
         Get an initial guess for the camera geometry (intrinsics, distortion). Distortion is typically left as 0,0,0,0.
         The parameters of the geometryModel are updated in place.
         """
-        if self.__isRollingShutter() and estimateLineDelay:
+        if self.isRollingShutter() and estimateLineDelay:
             resolution = self.camConfig.getResolution()
             sensorRows = resolution[1]
             frameRate = self.camConfig.getUpdateRate()
@@ -523,7 +529,7 @@ class IccCamera():
                 p_t = T_ct_w * aopt.HomogeneousExpression( targetPoint )
 
                 #build and append the error term
-                if (self.__isRollingShutter()):
+                if self.isRollingShutter():
                     rerr = error_t(
                         frame,
                         pidx,
