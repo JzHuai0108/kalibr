@@ -208,8 +208,9 @@ class IccCalibrator(object):
         #ORDERING:   N=num cams
         #            1. transformation imu-cam0 --> 6
         #            2. camera time2imu --> 1*numCams (only if enabled)
-        
-        print "Recovering covariance..."
+        print("Recovering covariance is problematic because evaluation of Jacobians of\n"
+              "BSpline MotionErrors for IMU biases is not implemented. Despite these\n"
+              "void Jacobians, the computation for covariance takes too long!")
         estimator = inc.IncrementalEstimator(CALIBRATION_GROUP_ID)
         rval = estimator.addBatch(self.problem, True)    
         est_stds = np.sqrt(estimator.getSigma2Theta().diagonal())
