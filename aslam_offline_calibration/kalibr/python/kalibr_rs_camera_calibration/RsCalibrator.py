@@ -221,8 +221,9 @@ class RsCalibrator(object):
             sensorRows = self.__observations[0].imRows()
             self.__camera.shutter().setParameters(np.array([1.0 / self.__config.framerate / float(sensorRows)]))
         status = self.__camera.initializeIntrinsics(self.__observations)
-        if status and self.__config.chain_yaml:
-            print('Initial projection and distortion parameters {}'.format(self.__camera.getParameters(True, True, True).T))
+        print('Initial projection and distortion parameters {}'.format(self.__camera.getParameters(True, True, True).T))
+        if self.__config.chain_yaml:
+            status = True
             camchain = kc.CameraChainParameters(self.__config.chain_yaml)
             camConfig = camchain.getCameraParameters(0)
             camera_model, intrinsics = camConfig.getIntrinsics()
