@@ -17,6 +17,7 @@ from RsPlot import plotSpline
 from RsPlot import plotSplineValues
 import pylab as pl
 import pdb
+from kalibr_imu_camera_calibration import BSplineIO
 
 # make numpy print prettier
 np.set_printoptions(suppress=True)
@@ -77,6 +78,10 @@ class RsCalibratorConfiguration(object):
 
     chain_yaml = None
     """Camera system configuration yaml. If provided, it will be used to initialize the camera projection and distortion parameters!"""
+
+    saveSamplePoses = False
+
+    projectPosesAlong = "rz"
 
     def validate(self, isRollingShutter):
         """Validate the configuration."""
@@ -165,6 +170,8 @@ class RsCalibrator(object):
         # build estimator problem
         optimisation_problem = self.__buildOptimizationProblem(W)
 
+        self.__saveBSplinePoses()
+
         self.__runOptimization(
             optimisation_problem,
             self.__config.deltaJ,
@@ -198,7 +205,31 @@ class RsCalibrator(object):
                     self.__config.maxNumberOfIterations
                 )
 
+        if self.__config.saveSamplePoses:
+            self.__saveBSplinePoses()
+
         self.__printResults()
+
+    def __saveBSplinePoses(self):
+            bspline = self.__poseSpline_dv.spline()
+            rate = 100
+            interval = 1.0 / rate
+            samplePoseTimes = np.arange(bspline.t_min() + 1e-8, bspline.t_max() + 1e-8, interval)
+            refPoseStream = open("samplePoses.txt", 'w')
+            print >> refPoseStream, "%poses {} Hz from the RS calibrator B-splines: time (sec), T_w_c (txyz, qxyzw).".format(rate)
+            BSplineIO.saveBSplineRefPose(samplePoseTimes, self.__poseSpline_dv, stream=refPoseStream)
+            refPoseStream.close()
+
+            timeList, sm_T_w_c_list = BSplineIO.loadPoses("samplePoses.txt")
+            T_c_w_list = [transform.inverse() for transform in sm_T_w_c_list]
+            print("project poses")
+            projected_T_c_w_list = BSplineIO.projectPoses(T_c_w_list, self.__config.projectPosesAlong)
+            print("inverse")
+            projected_T_w_c_list = [transform.inverse() for transform in projected_T_c_w_list]
+            print("save poses")
+            projectedFile = "projectedPoses{}.txt".format(self.__config.projectPosesAlong)
+            BSplineIO.savePoses(timeList, projected_T_w_c_list, projectedFile)
+            print("done")
 
     def __generateExtrinsicsInitialGuess(self):
         """Estimate the pose of the camera with a PnP solver. Call after initializing the intrinsics"""

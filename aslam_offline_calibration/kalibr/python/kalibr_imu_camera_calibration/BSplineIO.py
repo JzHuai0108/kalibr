@@ -205,6 +205,74 @@ def getSplineOrder(knotCoeffFile):
                 return int(line.split()[0])
             lineNumber += 1
 
+
+def generateRandomPoses():
+    timeList = []
+    smTList = []
+    for i in range(4):
+        q = np.random.rand(4)
+        q = q / np.linalg.norm(q)
+        p = np.random.rand(3)
+        smTList.append(sm.Transformation(q, p))
+        timeList.append(i + 1)
+    return timeList, smTList
+
+
+def savePoses(timeList, smTList, outputfile):
+    with open(outputfile, "w") as stream:
+        print >> stream, "%time (sec), T_w_c (txyz, qxyzw)"
+        for index, T in enumerate(smTList):
+            print >> stream, '%.9f,' % timeList[index], ','.join(map(str, T.t())), ',', ','.join(
+                map(str, sm.quatInv(T.q())))
+
+
+def loadPoses(poseFile):
+    """
+        load poses from a file, each line
+        time(sec), T_w_b(txyz, qxyzw)
+        return time list, sm Transformation list
+    """
+    timeList = []
+    smTransformationList = []
+    with open(poseFile, 'r') as stream:
+        for line in stream:
+            if line.startswith('%') or line.startswith('#'):
+                continue
+            segments = line.split(',')
+            time = float(segments[0])
+            pxyz = np.array(map(float, segments[1:4]))
+            qxyzw = np.array(map(float, segments[4:8]))
+            qxyzw[:3] = - qxyzw[:3]  # Hamilton to JPL convention.
+            T_w_b = sm.Transformation(qxyzw, pxyz)
+            timeList.append(time)
+            smTransformationList.append(T_w_b)
+    return timeList, smTransformationList
+
+
+def projectPoses(smTransformList, projectionCode):
+    """project the pose along specific axis, for instance project along x nullifies y and z component."""
+    componentList = [sm.fromTEuler(transform.T()) for transform in smTransformList] # tx, ty, tz, theta x, theta y, theta z.
+    projectDict = {'tx' : [0, (1, 2)],
+                   'ty' : [1, (0, 2)],
+                   'tz' : [2, (0, 1)],
+                   'rx' : [3, (4, 5)],
+                   'ry' : [4, (3, 5)],
+                   'rz' : [5, (3, 4)]}
+    variableIndex = projectDict[projectionCode][0]
+    nullindices = projectDict[projectionCode][1]
+    nullifiedComponentList = np.array(componentList)
+    for i in range(6):
+        if i in nullindices:
+            nullifiedComponentList[:, i] = 0
+        elif i == variableIndex:
+            pass
+        else:
+            nullifiedComponentList[:, i] = nullifiedComponentList[0, i]
+
+    newTransformList = [sm.Transformation(sm.toTEuler(row)) for row in nullifiedComponentList]
+    return newTransformList
+
+
 def loadPoseBSpline(knotCoeffFile):
     splineOrder = getSplineOrder(knotCoeffFile)
     poseSpline = bsplines.BSplinePose(splineOrder, sm.RotationVector())
@@ -222,5 +290,5 @@ def loadBSpline(knotCoeffFile):
             spline.knots().size, spline.coefficients().shape))
     return asp.EuclideanBSplineDesignVariable(spline)
 
-       
+
 

@@ -110,7 +110,10 @@ def __parseArgs():
     outputSettings = parser.add_argument_group('Output options')
     outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Enable (really) verbose output (disables plots).')
     outputSettings.add_argument('--show-extraction', action='store_true', dest='showextraction', help='Show the calibration target extraction. (disables plots).')
-
+    outputSettings.add_argument('--save-sample-poses', action='store_true', dest='saveSamplePoses',
+                                help='Save sampled poses from the optimized B-splines?')
+    outputSettings.add_argument('--project-poses-along', type=str, dest='projectPosesAlong', default="rz",
+                                help='Project the poses along the axis before saving them. Available options are (tx,ty,tz,rx,ry,rz)')
     # print help if no argument is specified
     if len(sys.argv)==1:
         parser.print_help()
@@ -184,6 +187,8 @@ def main():
     config.estimateParameters['intrinsics'] = not parsed.lock_intrinsics
     config.estimateParameters['distortion'] = not parsed.lock_distortion
     config.chain_yaml = parsed.chain_yaml
+    config.saveSamplePoses = parsed.saveSamplePoses
+    config.projectPosesAlong = parsed.projectPosesAlong
 
     ######
     ## Calibrate
