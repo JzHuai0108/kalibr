@@ -197,9 +197,11 @@ class VimapCsvReader(object):
         for index in self.indices:
             observation = acv.PnPObservation()
             frameObservation = self.targetObservations[index]
-            observation.setCornersImageFrame(np.array(frameObservation.getCornersImageFrame()))
-            observation.setCornersTargetFrame(np.array(frameObservation.getCornersTargetFrame()))
-            observation.setCornersIdx(np.array(frameObservation.getCornersIdx()))
+            corners = frameObservation.getCornersImageFrame()
+            if len(corners) > 0:
+                observation.setCornersImageFrame(np.array(corners))
+                observation.setCornersTargetFrame(np.array(frameObservation.getCornersTargetFrame()))
+                observation.setCornersIdx(np.array(frameObservation.getCornersIdx()))
             observation.setTime(frameObservation.time())
             observation.set_T_t_c(frameObservation.T_t_c())
 

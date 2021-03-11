@@ -90,6 +90,7 @@ class IccCalibrator(object):
                       gyroNoiseScale=1.0,
                       accelNoiseScale=1.0,
                       timeOffsetPadding=0.02,
+                      timeOffsetConstantSparsityPattern=0.08,
                       verbose=False  ):
 
         print "\tSpline order: %d" % (splineOrder)
@@ -148,7 +149,8 @@ class IccCalibrator(object):
         ## add error terms
         ############################################
         #Add calibration target reprojection error terms for all camera in chain
-        self.CameraChain.addCameraChainErrorTerms(problem, self.poseDv, blakeZissermanDf=blakeZisserCam, timeOffsetPadding=timeOffsetPadding)
+        self.CameraChain.addCameraChainErrorTerms(problem, self.poseDv, blakeZissermanDf=blakeZisserCam,
+                                                  timeOffsetConstantSparsityPattern=timeOffsetConstantSparsityPattern)
         
         # Initialize IMU error terms.
         for imu in self.ImuList:

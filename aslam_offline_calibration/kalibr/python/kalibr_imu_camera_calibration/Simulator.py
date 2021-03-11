@@ -352,20 +352,27 @@ class RsVisualInertialMeasViaBSplineSimulator(object):
             stream.write('{}\n'.format(header))
             for index, row in enumerate(self.allTargetCorners):
                 stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
-        timePadding = 2.5 / self.cameraConfig.getUpdateRate()
-        trueFrameTimes = self.__generateStateTimes(self.cameraConfig.getUpdateRate(), timePadding)
 
-        print('Simulating states...')
-        print("  Camera frame true start time {:.9f} and true finish time {:.9f}".format( \
+        lineDelay = self.cameraConfig.getLineDelayNanos()
+        resolution = self.cameraConfig.getResolution()
+        rows = resolution[1]
+        maxFrameRate = math.floor(1e9 * 0.7 / ((lineDelay + 1000) * rows))
+        cameraRate = min(maxFrameRate, self.cameraConfig.getUpdateRate())
+
+        timePadding = 2.5 / cameraRate
+        trueFrameTimes = self.__generateStateTimes(cameraRate, timePadding)
+
+        print('Simulating states at camera rate {}...'.format(cameraRate))
+        print("  Camera frame true start time {:.9f} and true finish time {:.9f}".format(
                 trueFrameTimes[0], trueFrameTimes[-1]))
         vertexCsv = os.path.join(outputDir, "vertices.csv")
         with open(vertexCsv, 'w') as vertexStream:
-            BSplineIO.saveStates(trueFrameTimes, self.poseSplineDv, self.gyroBiasSplineDv.spline(), \
+            BSplineIO.saveStates(trueFrameTimes, self.poseSplineDv, self.gyroBiasSplineDv.spline(),
                     self.accBiasSplineDv.spline(), self.timeOffset, vertexStream)
             print("  Written simulated states to {}".format(vertexCsv))
 
         print("Simulating IMU data...")
-        imuTimePadding = 2.0 / self.cameraConfig.getUpdateRate()
+        imuTimePadding = 2.0 / cameraRate
         trueImuTimes = self.__generateStateTimes(self.imuConfig.getUpdateRate(), imuTimePadding)
         imuTimes, imuData, imuBiases = self.simulateImuData(trueImuTimes)
         imuCsv = os.path.join(outputDir, "imu.csv")

@@ -97,6 +97,10 @@ def parseArgs():
     groupOpt.add_argument('--max-iter', type=int, default=30, dest='max_iter', help='Max. iterations (default: %(default)s)', required=False)
     groupOpt.add_argument('--recover-covariance', action='store_true', dest='recover_cov', help='Recover the covariance of the design variables.', required=False)
     groupOpt.add_argument('--timeoffset-padding', type=float, default=30.e-3, dest='timeoffset_padding', help='Maximum range in which the timeoffset may change during estimation [s] (default: %(default)s)', required=False)
+    groupOpt.add_argument('--timeoffset-pattern', type=float, default=30.e-3, dest='timeoffset_pattern',
+                          help='A time offset to pad the blocks generated in the hessian/jacobian to ensure'
+                               ' a constant symbolic representation of the batch estimation problem, even when a change'
+                               ' in the shutter timing shifts the capture time to another spline segment.')
 
     #Result options  
     outputSettings = parser.add_argument_group('Output options')
@@ -206,6 +210,7 @@ def main():
                       huberGyro=-1,
                       maxIterations=parsed.max_iter,
                       timeOffsetPadding=parsed.timeoffset_padding,
+                      timeOffsetConstantSparsityPattern=parsed.timeoffset_pattern,
                       verbose = parsed.verbose)
 
     print

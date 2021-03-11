@@ -77,7 +77,6 @@ class IccCamera():
             multithreading = not (showCorners or showReproj or showOneStep)
             self.targetObservations = kc.extractCornersFromDataset(self.dataset, self.detector, multithreading=multithreading)
         numObservations = [len(obs.getCornersImageFrame()) for obs in self.targetObservations]
-        print("Extracted corners with multithreading? {}".format(multithreading))
         hist, bin_edges = np.histogram(numObservations, bins=np.arange(0, 156, 12))
         print("Histogram of detected landmarks in frames {}\nBin edges of #landmarks {}".format(hist, bin_edges))
         self.allReprojectionErrors = []
@@ -468,7 +467,7 @@ class IccCamera():
             else:
                 sm.logWarn("Could not estimate T_t_c for observation at index {0}".format(idx))
 
-    def addCameraErrorTerms(self, problem, poseSplineDv, T_cN_b, blakeZissermanDf=0.0, timeOffsetPadding=0.0):
+    def addCameraErrorTerms(self, problem, poseSplineDv, T_cN_b, blakeZissermanDf=0.0, timeOffsetConstantSparsityPattern=0.0):
         print
         print "Adding camera error terms ({0})".format(self.dataset.topic)
         
@@ -522,8 +521,8 @@ class IccCamera():
                 # from body at t to world transformation.
                 T_w_bt = poseSplineDv.transformationAtTime(
                     keypointTime,
-                    timeOffsetPadding,
-                    timeOffsetPadding)
+                    timeOffsetConstantSparsityPattern,
+                    timeOffsetConstantSparsityPattern)
                 T_bt_w = T_w_bt.inverse()
                 T_ct_w = T_cN_b * T_bt_w
 
@@ -768,7 +767,7 @@ class IccCameraChain():
             cam.addDesignVariables(problem, estimateParameters, noExtrinsics, baselinedv_group_id=baselinedv_group_id)
     
     #add the reprojection error terms for all cameras in the chain
-    def addCameraChainErrorTerms(self, problem, poseSplineDv, blakeZissermanDf=-1, timeOffsetPadding=0.0):
+    def addCameraChainErrorTerms(self, problem, poseSplineDv, blakeZissermanDf=-1, timeOffsetConstantSparsityPattern=0.0):
         
         #add the induviduak error terms for all cameras
         for camNr, cam in enumerate(self.camList):
@@ -783,7 +782,7 @@ class IccCameraChain():
             T_cN_b = T_chain
             
             #add the error terms
-            cam.addCameraErrorTerms( problem, poseSplineDv, T_cN_b, blakeZissermanDf, timeOffsetPadding )
+            cam.addCameraErrorTerms( problem, poseSplineDv, T_cN_b, blakeZissermanDf, timeOffsetConstantSparsityPattern)
 
     def getCornersImageSample(self, poseSplineDv, timeOffsetPadding = 0.0,
                               cameraIndex = 0, frameIndex = 0):
