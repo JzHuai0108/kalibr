@@ -70,10 +70,10 @@ def parseArgs():
     #simulation options
     groupSim = parser.add_argument_group('Simulation options')
     groupSim.add_argument('pose_file', help='The file of the knot coefficients of the pose B spline')
-    groupSim.add_argument('--gyro-bias-file', dest='gyro_bias_file', \
+    groupSim.add_argument('--gyro-bias-file', dest='gyro_bias_file',
             help=('The file of the knot coefficients of the gyro bias B spline.'
                   ' If not specified, it will be deduced from the pose_file!'))
-    groupSim.add_argument('--acc-bias-file', dest='acc_bias_file', \
+    groupSim.add_argument('--acc-bias-file', dest='acc_bias_file',
             help=('The file of the knot coefficients of the accelerometer bias B spline.'
                   ' If not specified, it will be deduced from the pose_file!'))
     groupSim.add_argument('--output_dir', help='Where to put output files?')
@@ -86,7 +86,7 @@ def parseArgs():
     #configuration files
     groupCam = parser.add_argument_group('Camera system configuration')
     groupCam.add_argument('--cam', dest='chain_yaml', help='Camera-IMU system configuration as yaml file', required=True, action=Once)
-    groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma', \
+    groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma',
             help='Standard deviation of the distribution of reprojected corner points [px]. (default: %(default)s)')
 
     groupImu = parser.add_argument_group('IMU configuration')
@@ -120,14 +120,16 @@ def main():
     if not parsed.acc_bias_file:
         parsed.acc_bias_file = parsed.pose_file.replace('pose', 'acc_bias', 1)
 
-    if  parsed.imu_yaml and not parsed.imu_model:
+    if parsed.imu_yaml and not parsed.imu_model:
         #Maintain backwards compatibility with previous interface.
         parsed.imu_model = 'calibrated'
 
     print("Loading B splines...")
-    simulator = Simulator.RsVisualInertialMeasViaBSplineSimulator(parsed)
+    if parsed.imu_model:
+        simulator = Simulator.RsCameraImuSimulator(parsed)
+    else:
+        simulator = Simulator.RsCameraSimulator(parsed)
     simulator.checkNaiveVsNewtonRsProjection(parsed.output_dir)
-
     simulator.simulate(parsed.output_dir)
 
 if __name__ == "__main__":

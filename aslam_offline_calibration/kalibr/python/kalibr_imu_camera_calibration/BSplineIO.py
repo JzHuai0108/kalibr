@@ -1,4 +1,4 @@
-
+import math
 import sys
 
 import numpy as np
@@ -9,19 +9,55 @@ import bsplines
 import sm
 
 
-def saveBSplineRefPose(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
+def sampleAndSaveBSplinePoses(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.Transformation()):
     timeOffsetPadding = 0.0  
-    for time in times:    
+    for time in times:
         dv = aopt.Scalar(time)
         timeExpression = dv.toExpression()
         
         if time <= poseSplineDv.spline().t_min() or time >= poseSplineDv.spline().t_max():
             print >> sys.stdout, "Warn: time out of range "
-            continue       
+            continue
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
         sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c
         # quatInv used here to convert kalibr's JPL quaternion to Halmilton quaternion
-        print >> stream, '%.9f' % time, ' '.join(map(str,sm_T_w_c.t())), ' '.join(map(str, sm.quatInv(sm_T_w_c.q())))
+        print >> stream, '{:.9f}, {}, {}'.format(time, ','.join(map(str,sm_T_w_c.t())),
+                                                 ','.join(map(str, sm.quatInv(sm_T_w_c.q()))))
+
+def sampleBSplinePoses(stateTimes, poseSplineDv):
+    """
+    return:
+        1. frameIds.
+        2. saved state timestamps.
+        3. states, each state T_WB[xyz, qxyzw], v_W.
+    """
+    states = np.zeros((len(stateTimes),16))
+    measuredTimes = np.zeros(len(stateTimes))
+    frameIds = np.zeros(len(stateTimes), dtype=np.int32)
+
+    tmin = poseSplineDv.spline().t_min()
+    tmax = poseSplineDv.spline().t_max()
+
+    timeOffsetPadding = 0.0
+    frameId = 0
+    for time in stateTimes:
+        if time <= tmin or time >= tmax:
+            print "Warn: time out of range in generating a state"
+            continue
+        dv = aopt.Scalar(time)
+        timeExpression = dv.toExpression()
+        T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
+        sm_T_w_b = sm.Transformation(T_w_b.toTransformationMatrix())
+        v_w = poseSplineDv.linearVelocity(time).toEuclidean()
+
+        frameIds[frameId] = frameId
+        measuredTimes[frameId] = time
+        states[frameId, 0:3] = sm_T_w_b.t()
+        # quatInv converts JPL quaternion to Halmilton quaternion (x,y,z,w).
+        states[frameId, 3:7] = sm.quatInv(sm_T_w_b.q())
+        states[frameId, 7:10] = v_w
+        frameId += 1
+    return frameIds, measuredTimes, states
 
 
 def sampleBSplines(stateTimes, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset):
@@ -73,12 +109,20 @@ def saveStates(times, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset = 
                  'quaternion x, quaternion y, quaternion z, quaternion w, velocity x [m/s], '
                  'velocity y [m/s], velocity z [m/s], acc bias x [m/s^2], acc bias y [m/s^2], '
                  'acc bias z [m/s^2], gyro bias x [rad/s], gyro bias y [rad/s], gyro bias z [rad/s]\n')
-    frameIds, measuredTimes, states = sampleBSplines( \
+    frameIds, measuredTimes, states = sampleBSplines(
             times, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset)
     for index, row in enumerate(states):
         msg = ', '.join(map(str, row))
         stream.write("{:d}, {}, {}\n".format(frameIds[index], toNanosecondString(measuredTimes[index]), msg))
 
+def saveCameraStates(times, poseSplineDv, stream = sys.stdout):
+    '''save the system states at times.'''
+    stream.write('vertex index, timestamp [ns], position x [m], position y [m], position z [m], '
+                 'quaternion x, quaternion y, quaternion z, quaternion w\n')
+    frameIds, measuredTimes, states = sampleBSplinePoses(times, poseSplineDv)
+    for index, row in enumerate(states):
+        msg = ', '.join(map(str, row))
+        stream.write("{:d}, {}, {}\n".format(frameIds[index], toNanosecondString(measuredTimes[index]), msg))
 
 def saveBSplineRefImuMeas(cself, filename):
     print >> sys.stdout, "  Saving IMU measurements generated from B-spline to", filename
@@ -121,8 +165,8 @@ def saveBSpline(cself, outputDir):
         imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData if
                              poseSplineDv.spline().t_min() < im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max()])
         refPoseStream = open("poses_check.txt", 'w')
-        print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"  
-        saveBSplineRefPose(imuTimes, poseSplineDv, stream=refPoseStream)
+        print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"
+        sampleAndSaveBSplinePoses(imuTimes, poseSplineDv, stream=refPoseStream)
         refPoseStream.close()
 
         timeList = list()
@@ -222,8 +266,8 @@ def savePoses(timeList, smTList, outputfile):
     with open(outputfile, "w") as stream:
         print >> stream, "%time (sec), T_w_c (txyz, qxyzw)"
         for index, T in enumerate(smTList):
-            print >> stream, '%.9f,' % timeList[index], ','.join(map(str, T.t())), ',', ','.join(
-                map(str, sm.quatInv(T.q())))
+            print >> stream, '{:.9f}, {}, {}'.format(timeList[index], ','.join(map(str, T.t())),
+                                                     ','.join(map(str, sm.quatInv(T.q()))))
 
 
 def loadPoses(poseFile):
@@ -249,28 +293,42 @@ def loadPoses(poseFile):
     return timeList, smTransformationList
 
 
-def projectPoses(smTransformList, projectionCode):
-    """project the pose along specific axis, for instance project along x nullifies y and z component."""
+def projectPoses(smTransformList, projectionCode, maxTranslation=1.5):
+    """project the pose along specific axis, for instance project along x, and make other components take the average."""
     componentList = [sm.fromTEuler(transform.T()) for transform in smTransformList] # tx, ty, tz, theta x, theta y, theta z.
-    projectDict = {'tx' : [0, (1, 2)],
-                   'ty' : [1, (0, 2)],
-                   'tz' : [2, (0, 1)],
-                   'rx' : [3, (4, 5)],
-                   'ry' : [4, (3, 5)],
-                   'rz' : [5, (3, 4)]}
-    variableIndex = projectDict[projectionCode][0]
-    nullindices = projectDict[projectionCode][1]
-    nullifiedComponentList = np.array(componentList)
+    componentArray = np.array(componentList)
+    meanValues = []
     for i in range(6):
-        if i in nullindices:
-            nullifiedComponentList[:, i] = 0
-        elif i == variableIndex:
-            pass
+        column = componentArray[:, i]
+        if i < 3:
+            mean = column[(-maxTranslation < column) & (column < maxTranslation)].mean()
         else:
-            nullifiedComponentList[:, i] = nullifiedComponentList[0, i]
+            mean = column.mean()
+        meanValues.append(mean)
+    meanValues = np.array(meanValues)
 
-    newTransformList = [sm.Transformation(sm.toTEuler(row)) for row in nullifiedComponentList]
-    return newTransformList
+    projectDict = {'tx' : 0,
+                   'ty' : 1,
+                   'tz' : 2,
+                   'rx' : 3,
+                   'ry' : 4,
+                   'rz' : 5}
+    variableIndex = projectDict[projectionCode]
+
+    # use average values for not affected components.
+    rows = componentArray.shape[0]
+    for i in range(6):
+        if i == variableIndex:
+            for j in range(rows):
+                if componentArray[j, i] > maxTranslation or componentArray[j, i] < -maxTranslation:
+                    if j == 0:
+                        componentArray[j, i]= math.copysign(1, componentArray[j, i]) * maxTranslation
+                    else:
+                        componentArray[j, i] = componentArray[j-1, i]
+        else:
+            componentArray[:, i] = meanValues[i]
+
+    return [sm.Transformation(sm.toTEuler(row)) for row in componentArray]
 
 
 def loadPoseBSpline(knotCoeffFile):
@@ -282,6 +340,7 @@ def loadPoseBSpline(knotCoeffFile):
     poseDv = asp.BSplinePoseDesignVariable(poseSpline)
     return poseDv
 
+
 def loadBSpline(knotCoeffFile):
     splineOrder = getSplineOrder(knotCoeffFile)
     spline = bsplines.BSpline(splineOrder)
@@ -289,6 +348,82 @@ def loadBSpline(knotCoeffFile):
     print("  Initialized a Euclidean spline with {} knots and coefficients {}.".format( \
             spline.knots().size, spline.coefficients().shape))
     return asp.EuclideanBSplineDesignVariable(spline)
+
+
+def __isBSplineFile(filename):
+    with open(filename, 'r') as stream:
+        first_line = stream.readline()
+        if 'splineOrder' in first_line:
+            return True
+    return False
+
+
+def ensureContinuousRotationVectors(curve):
+    """
+    Ensures that the rotation vector does not flip and enables a continuous trajectory modeling.
+    Updates curves in place.
+    Copied from RsCalibrator.py
+    """
+    for i in range(1, curve.shape[1]):
+        previousRotationVector = curve[3:6,i-1]
+        r = curve[3:6,i]
+        angle = np.linalg.norm(r)
+        axis = r/angle
+        best_r = r
+        best_dist = np.linalg.norm( best_r - previousRotationVector)
+
+        for s in range(-3,4):
+            aa = axis * (angle + math.pi * 2.0 * s)
+            dist = np.linalg.norm( aa - previousRotationVector )
+            if dist < best_dist:
+                best_r = aa
+                best_dist = dist
+        curve[3:6,i] = best_r
+
+
+def generateInitialSpline(times, smTransformList, splineOrder = 5, timeOffsetPadding = 0.05, numberOfKnots = None):
+    """
+    Adapted from RsCalibrator.py
+    :param times: list of time in seconds
+    :param smTransformList: list of sm transforms for each timestamp
+    :param splineOrder:
+    :param timeOffsetPadding:
+    :param numberOfKnots:
+    :param framerate:
+    :return:
+    """
+    poseSpline = bsplines.BSplinePose(splineOrder, sm.RotationVector())
+    curve = np.matrix([ poseSpline.transformationToCurveValue(transform.T()) for transform in smTransformList]).T
+    if np.isnan(curve).any():
+        raise RuntimeError("Nans in curve values")
+        sys.exit(0)
+    # Add padding on either end to allow the spline to slide during optimization.
+    times = np.hstack((times[0] - (timeOffsetPadding * 2.0), times, times[-1] + (timeOffsetPadding * 2.0)))
+    curve = np.hstack((curve[:,0], curve, curve[:,-1]))
+    ensureContinuousRotationVectors(curve)
+
+    seconds = times[-1] - times[0]
+    framerate = len(times) / seconds
+    if numberOfKnots is not None:
+        knots = numberOfKnots
+    else:
+        knots = int(round(seconds * framerate/3))
+
+    print("Initializing a pose spline with %d knots (%f knots per second over %f seconds)" % ( knots, 100, seconds))
+    poseSpline.initPoseSplineSparse(times, curve, knots, 1e-4)
+    return poseSpline
+
+
+def selectiveLoadPoseBSpline(filename):
+    isBSpline = __isBSplineFile(filename)
+    if isBSpline:
+        return loadPoseBSpline(filename)
+    else:
+        timeList, smTransformList = loadPoses(filename)
+        poseSpline = generateInitialSpline(timeList, smTransformList)
+        poseDv = asp.BSplinePoseDesignVariable(poseSpline)
+        return poseDv
+
 
 
 

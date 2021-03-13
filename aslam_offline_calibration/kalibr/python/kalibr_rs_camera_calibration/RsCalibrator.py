@@ -170,8 +170,6 @@ class RsCalibrator(object):
         # build estimator problem
         optimisation_problem = self.__buildOptimizationProblem(W)
 
-        self.__saveBSplinePoses()
-
         self.__runOptimization(
             optimisation_problem,
             self.__config.deltaJ,
@@ -214,22 +212,18 @@ class RsCalibrator(object):
             bspline = self.__poseSpline_dv.spline()
             rate = 100
             interval = 1.0 / rate
-            samplePoseTimes = np.arange(bspline.t_min() + 1e-8, bspline.t_max() + 1e-8, interval)
-            refPoseStream = open("samplePoses.txt", 'w')
+            padding = 2
+            samplePoseTimes = np.arange(bspline.t_min() + padding, bspline.t_max() - padding, interval)
+            refPoseStream = open("original_sample_poses.txt", 'w')
             print >> refPoseStream, "%poses {} Hz from the RS calibrator B-splines: time (sec), T_w_c (txyz, qxyzw).".format(rate)
-            BSplineIO.saveBSplineRefPose(samplePoseTimes, self.__poseSpline_dv, stream=refPoseStream)
+            BSplineIO.sampleAndSaveBSplinePoses(samplePoseTimes, self.__poseSpline_dv, stream=refPoseStream)
             refPoseStream.close()
 
-            timeList, sm_T_w_c_list = BSplineIO.loadPoses("samplePoses.txt")
-            T_c_w_list = [transform.inverse() for transform in sm_T_w_c_list]
-            print("project poses")
-            projected_T_c_w_list = BSplineIO.projectPoses(T_c_w_list, self.__config.projectPosesAlong)
-            print("inverse")
-            projected_T_w_c_list = [transform.inverse() for transform in projected_T_c_w_list]
-            print("save poses")
-            projectedFile = "projectedPoses{}.txt".format(self.__config.projectPosesAlong)
+            timeList, sm_T_w_c_list = BSplineIO.loadPoses("original_sample_poses.txt")
+            projected_T_w_c_list = BSplineIO.projectPoses(sm_T_w_c_list, self.__config.projectPosesAlong)
+            projectedFile = "sample_poses.txt"
             BSplineIO.savePoses(timeList, projected_T_w_c_list, projectedFile)
-            print("done")
+
 
     def __generateExtrinsicsInitialGuess(self):
         """Estimate the pose of the camera with a PnP solver. Call after initializing the intrinsics"""
@@ -248,19 +242,21 @@ class RsCalibrator(object):
         Get an initial guess for the camera geometry (intrinsics, distortion). Distortion is typically left as 0,0,0,0.
         The parameters of the geometryModel are updated in place.
         """
-        if (self.__isRollingShutter()):
-            sensorRows = self.__observations[0].imRows()
-            self.__camera.shutter().setParameters(np.array([1.0 / self.__config.framerate / float(sensorRows)]))
-        status = self.__camera.initializeIntrinsics(self.__observations)
-        print('Initial projection and distortion parameters {}'.format(self.__camera.getParameters(True, True, True).T))
         if self.__config.chain_yaml:
-            status = True
             camchain = kc.CameraChainParameters(self.__config.chain_yaml)
             camConfig = camchain.getCameraParameters(0)
-            camera_model, intrinsics = camConfig.getIntrinsics()
-            dist_model, dist_coeff = camConfig.getDistortion()
-            self.__camera.setParameters(np.hstack([intrinsics, dist_coeff]), True, True, False)
-            print('External projection and distortion parameters {}'.format(self.__camera.getParameters(True, True, True).T))
+            aslamCamera = kc.AslamCamera.fromParameters(camConfig)
+            self.__camera = aslamCamera.geometry
+            self.__camera_dv = self.__cameraModelFactory.designVariable(self.__camera)
+            status = True
+            print('External projection and distortion parameters {}'.format(
+                self.__camera.getParameters(True, True, True).T))
+        else:
+            if self.__isRollingShutter():
+                sensorRows = self.__observations[0].imRows()
+                self.__camera.shutter().setParameters(np.array([1.0 / self.__config.framerate / float(sensorRows)]))
+            status = self.__camera.initializeIntrinsics(self.__observations)
+            print('Initial projection and distortion parameters {}'.format(self.__camera.getParameters(True, True, True).T))
         return status
 
     def __getMotionModelPriorOrDefault(self):
@@ -446,7 +442,7 @@ class RsCalibrator(object):
                 if dist < best_dist:
                     best_r = aa
                     best_dist = dist
-            curve[3:6,i] = best_r;
+            curve[3:6,i] = best_r
 
     def __initPoseDesignVariables(self, problem):
         """Get the design variable representation of the pose spline and add them to the problem"""

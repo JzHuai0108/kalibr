@@ -202,10 +202,9 @@ class VimapCsvReader(object):
                 observation.setCornersImageFrame(np.array(corners))
                 observation.setCornersTargetFrame(np.array(frameObservation.getCornersTargetFrame()))
                 observation.setCornersIdx(np.array(frameObservation.getCornersIdx()))
-            observation.setTime(frameObservation.time())
-            observation.set_T_t_c(frameObservation.T_t_c())
-
-            pnpObservations.append(observation)
+                observation.setTime(frameObservation.time())
+                observation.set_T_t_c(frameObservation.T_t_c())
+                pnpObservations.append(observation)
         return pnpObservations
 
     def loadVimap(self, folder):
