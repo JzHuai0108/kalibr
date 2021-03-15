@@ -452,8 +452,11 @@ class IccCamera():
         if self.isRollingShutter() and estimateLineDelay:
             resolution = self.camConfig.getResolution()
             sensorRows = resolution[1]
-            frameRate = self.camConfig.getUpdateRate()
-            self.camera.geometry.shutter().setParameters(np.array([1.0 / (frameRate * float(sensorRows))]))
+            times = [observation.time().toSec() for observation in self.targetObservations]
+            times = np.sort(times)
+            deltaTimes = np.diff(times)
+            estimatedFps = 1.0 / np.median(deltaTimes)
+            self.camera.geometry.shutter().setParameters(np.array([1.0 / (estimatedFps * float(sensorRows))]))
             print('After initializing line delay, projection, distortion, and shutter parameters {}'.format(
                 self.camera.geometry.getParameters(True, True, True).T))
 

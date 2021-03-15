@@ -293,7 +293,7 @@ def loadPoses(poseFile):
     return timeList, smTransformationList
 
 
-def projectPoses(smTransformList, projectionCode, maxTranslation=1.5):
+def projectPoses(smTransformList, projectionCode, maxTranslation=2.5):
     """project the pose along specific axis, for instance project along x, and make other components take the average."""
     componentList = [sm.fromTEuler(transform.T()) for transform in smTransformList] # tx, ty, tz, theta x, theta y, theta z.
     componentArray = np.array(componentList)
