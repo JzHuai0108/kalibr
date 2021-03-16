@@ -102,6 +102,13 @@ def __parseArgs():
     groupOpt.add_argument('--max-iter', type=int, default=30, dest='max_iter', help='Max. iterations (default: %(default)s).', required=False)
     groupOpt.add_argument('--lock-intrinsics', action='store_true', dest='lock_intrinsics', help='Disable the intrinsics calibration', required=False)      
     groupOpt.add_argument('--lock-distortion', action='store_true', dest='lock_distortion', help='Disable the distortion calibration', required=False)      
+    groupOpt.add_argument('--timeoffset-padding', type=float, default=0.5, dest='timeoffset_padding',
+                          help='Maximum range in which the timeoffset may change during estimation [s] '
+                               '(default: %(default)s)', required=False)
+    groupOpt.add_argument('--timeoffset-pattern', type=float, default=80e-3, dest='timeoffset_pattern',
+                          help='A time offset to pad the blocks generated in the hessian/jacobian to ensure'
+                               ' a constant symbolic representation of the batch estimation problem, even when a change'
+                               ' in the shutter timing shifts the capture time to another spline segment.')
 
     groupCam = parser.add_argument_group('Camera system configuration')
     groupCam.add_argument('--cams', dest='chain_yaml', help=('Camera system configuration as yaml file.\n'
@@ -186,8 +193,8 @@ def main():
     config.inverseFeatureCovariance = 1.0/parsed.featureVariance
     config.maxNumberOfIterations = parsed.max_iter
     config.framerate = parsed.framerate
-    config.timeOffsetConstantSparsityPattern = 0.08
-    config.timeOffsetPadding = 0.5
+    config.timeOffsetConstantSparsityPattern = parsed.timeoffset_pattern
+    config.timeOffsetPadding = parsed.timeoffset_padding
     config.estimateParameters['intrinsics'] = not parsed.lock_intrinsics
     config.estimateParameters['distortion'] = not parsed.lock_distortion
     config.chain_yaml = parsed.chain_yaml
