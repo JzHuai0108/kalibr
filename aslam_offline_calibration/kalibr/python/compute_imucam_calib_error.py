@@ -91,7 +91,7 @@ def main():
     deltaT = ref_T_cam_imu.inverse() * T_cam_imu
     translationError = np.linalg.norm(deltaT.t()) * 1000
     rotationVector = sm.quat2AxisAngle(deltaT.q())
-    rotationError = math.atan(math.tan(np.linalg.norm(rotationVector))) * 180 / math.pi
+    rotationError = abs(math.atan(math.tan(np.linalg.norm(rotationVector))) * 180 / math.pi)
 
     deltaTime = referenceChain.getTimeshiftCamImu(camNr) - estimatedChain.getTimeshiftCamImu(camNr)
     deltaTime = deltaTime * 1000000
