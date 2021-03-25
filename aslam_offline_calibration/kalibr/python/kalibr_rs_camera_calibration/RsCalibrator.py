@@ -84,6 +84,8 @@ class RsCalibratorConfiguration(object):
 
     projectPosesAlong = "rz"
 
+    reprojectFrameIndex = 0
+
     def validate(self, isRollingShutter):
         """Validate the configuration."""
         # only rolling shutters can be estimated
@@ -216,14 +218,14 @@ class RsCalibrator(object):
             interval = 1.0 / rate
             padding = 2
             samplePoseTimes = np.arange(bspline.t_min() + padding, bspline.t_max() - padding, interval)
-            refPoseStream = open("original_sample_poses.txt", 'w')
+            refPoseStream = open("sampled_poses.txt", 'w')
             print >> refPoseStream, "%poses {} Hz from the RS calibrator B-splines: time (sec), T_w_c (txyz, qxyzw).".format(rate)
             BSplineIO.sampleAndSaveBSplinePoses(samplePoseTimes, self.__poseSpline_dv, stream=refPoseStream)
             refPoseStream.close()
 
-            timeList, sm_T_w_c_list = BSplineIO.loadPoses("original_sample_poses.txt")
+            timeList, sm_T_w_c_list = BSplineIO.loadPoses("sampled_poses.txt")
             projected_T_w_c_list = BSplineIO.projectPoses(sm_T_w_c_list, self.__config.projectPosesAlong)
-            projectedFile = "sample_poses.txt"
+            projectedFile = "squashed_poses.txt"
             BSplineIO.savePoses(timeList, projected_T_w_c_list, projectedFile)
 
 
@@ -403,6 +405,86 @@ class RsCalibrator(object):
 
         return problem
 
+    def getReprojectedCorners(self, frameIndex):
+        """
+        Reproject detected corners of a frame with the RS and the GS.
+        :param frameIndex: the index of fhe image frame within the used images for reprojection.
+        :return: A NX6 array. Each row corresponds to an observed landmark,
+        The columns correspond to reprojected RS point, reprojected GS point, and the detected corner.
+        """
+        observation = self.__observations[frameIndex]
+        print("Found matching frame {} of time {}".format(frameIndex, observation.time().toSec()))
+        imageCornerPoints = np.array(observation.getCornersImageFrame())  # Nx2
+
+        # Rolling shutter projections
+        # add all the landmarks once
+        landmarks = []
+        landmarks_expr = []
+        target = self.__cameraGeometry.ctarget.detector.target()
+        for i in range(0, target.size()):
+            landmark_w_dv = aopt.HomogeneousPointDv(sm.toHomogeneous(target.point(i)))
+            landmark_w_dv.setActive(self.__config.estimateParameters['landmarks'])
+            landmarks.append(landmark_w_dv)
+            landmarks_expr.append(landmark_w_dv.toExpression())
+
+        frame = self.__cameraModelFactory.frameType()
+        frame.setGeometry(self.__camera)
+        frame.setTime(observation.time())
+        # build an error term for every observed corner
+        corner_id_list = observation.getCornersIdx()
+        predictedMeasurements = list()
+        for index, point in enumerate(observation.getCornersImageFrame()):
+            # keypoint time offset by line delay as expression type
+            keypoint_time = self.__camera_dv.keypointTime(frame.time(), point)
+
+            # from target to world transformation.
+            T_w_t = self.__poseSpline_dv.transformationAtTime(
+                keypoint_time,
+                self.__config.timeOffsetConstantSparsityPattern,
+                self.__config.timeOffsetConstantSparsityPattern
+            )
+            T_t_w = T_w_t.inverse()
+
+            # transform target point to camera frame
+            p_t = T_t_w * landmarks_expr[corner_id_list[index]]
+
+            # create the keypoint
+            keypoint_index = frame.numKeypoints()
+            keypoint = acv.Keypoint2()
+            keypoint.setMeasurement(point)
+            inverseFeatureCovariance = self.__config.inverseFeatureCovariance
+            keypoint.setInverseMeasurementCovariance(np.eye(len(point)) * inverseFeatureCovariance)
+            frame.addKeypoint(keypoint)
+
+            rerr = self.__cameraModelFactory.reprojectionError(frame, keypoint_index, p_t, self.__camera_dv)
+            rerr.evaluateError()
+            predictedMeas = imageCornerPoints[index, :].T - rerr.error()
+            predictedMeasurements.append(predictedMeas)
+        rsImageCornerProjected = np.array(predictedMeasurements)  # NX2
+
+        # Global shutter projections
+        # Build a transformation expression for the time.
+        cameraTimeToImuTimeDv = aopt.Scalar(0.0)
+        halfSensorRows = self.__observations[0].imRows() / 2
+        lineDelay = self.__camera_dv.shutterDesignVariable().value().lineDelay()
+        frameTime = cameraTimeToImuTimeDv.toExpression() + observation.time().toSec() + halfSensorRows * lineDelay
+        frameTimeScalar = frameTime.toScalar()
+        print("frame time scalar {}".format(frameTimeScalar))
+        # as we are applying an initial time shift outside the optimization so
+        # we need to make sure that we dont add data outside the spline definition
+        if frameTimeScalar <= self.__poseSpline_dv.spline().t_min() or frameTimeScalar >= self.__poseSpline_dv.spline().t_max():
+            return np.array([])
+
+        T_w_c = self.__poseSpline_dv.transformationAtTime(
+            frameTime,
+            self.__config.timeOffsetConstantSparsityPattern,
+            self.__config.timeOffsetConstantSparsityPattern
+        )
+        # Simple approach to reproject landmarks with float numbers.
+        observation.set_T_t_c(sm.Transformation(T_w_c.toTransformationMatrix()))
+        gsImageCornerProjected = np.array(observation.getCornerReprojection(self.__camera))  # Nx2
+        return np.concatenate((rsImageCornerProjected, gsImageCornerProjected, imageCornerPoints), axis=1)
+
     def __buildErrorTerm(self, frame, keypoint_index, p_t, camera_dv, poseSpline_dv):
         """
         Build an error term that considers the shutter type. A Global Shutter camera gets the standard reprojection error
@@ -482,6 +564,10 @@ class RsCalibrator(object):
 
         # go for it:
         status = optimizer.optimize()
+        if status:
+            corners = self.getReprojectedCorners(self.__config.reprojectFrameIndex)
+            np.savetxt("reprojected_corners_{}.txt".format(self.__config.reprojectFrameIndex), corners)
+
         recoverCov = False
         if status and recoverCov:
             self.recoverCovariance(problem)

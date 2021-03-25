@@ -566,11 +566,16 @@ class IccCamera():
         print "\r  Added error terms for {} frames                      ".format( len(self.targetObservations) )
         self.allReprojectionErrors = allReprojectionErrors
 
-    def getCornersImageSample(self, poseSplineDv, T_cN_b, timeOffsetPadding = 0.0, frameIndex = 0):
+    def getReprojectedCorners(self, poseSplineDv, T_cN_b, timeOffsetPadding = 0.0, frameIndex = 0):
         """
-        return a NX6 array with each row corresponding to an observed landmark.
-        The 6 columns in a row corresponds to predicted measurement, reprojected measurement, observed measurement.
-        Though obtained by two approaches, the predicted measurement is literally the same as the reprojected measurement.
+        Reproject detected corners in a frame.
+        :param poseSplineDv:
+        :param T_cN_b:
+        :param timeOffsetPadding:
+        :param frameIndex:
+        :return: a NX6 array. Each row corresponds to an observed landmark.
+        The 6 columns correspond to reprojected point by method 1, reprojected point by method 2,
+        and the detected corner. The reprojection by the two methods are almost the same.
         """
         obs = self.targetObservations[frameIndex]
         imageCornerPoints =  np.array( obs.getCornersImageFrame()) # Nx2
@@ -787,10 +792,10 @@ class IccCameraChain():
             #add the error terms
             cam.addCameraErrorTerms( problem, poseSplineDv, T_cN_b, blakeZissermanDf, timeOffsetConstantSparsityPattern)
 
-    def getCornersImageSample(self, poseSplineDv, timeOffsetPadding = 0.0,
+    def getReprojectedCorners(self, poseSplineDv, timeOffsetPadding = 0.0,
                               cameraIndex = 0, frameIndex = 0):
         T_cN_b = self.camList[cameraIndex].T_c_b_Dv.toExpression()
-        return self.camList[cameraIndex].getCornersImageSample(
+        return self.camList[cameraIndex].getReprojectedCorners(
                 poseSplineDv, T_cN_b, timeOffsetPadding, frameIndex) 
 
     def getCornersTargetSample(self, cameraIndex, frameIndex):    

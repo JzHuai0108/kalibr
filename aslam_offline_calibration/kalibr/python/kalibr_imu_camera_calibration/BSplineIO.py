@@ -160,15 +160,15 @@ def saveBSpline(cself, outputDir):
     imu = cself.ImuList[idx]    
     poseSplineDv = cself.poseDv
 
+    imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData if
+                         poseSplineDv.spline().t_min() < im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max()])
+    refPoseStream = open("sampled_poses.txt", 'w')
+    print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"
+    sampleAndSaveBSplinePoses(imuTimes, poseSplineDv, stream=refPoseStream)
+    refPoseStream.close()
+
     computeCheckData = False
     if computeCheckData:
-        imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData if
-                             poseSplineDv.spline().t_min() < im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max()])
-        refPoseStream = open("poses_check.txt", 'w')
-        print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"
-        sampleAndSaveBSplinePoses(imuTimes, poseSplineDv, stream=refPoseStream)
-        refPoseStream.close()
-
         timeList = list()
         for obs in cself.CameraChain.camList[0].targetObservations:
             frameTime = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toScalar() + obs.time().toSec() + \
@@ -206,7 +206,7 @@ def saveBSpline(cself, outputDir):
                     cself.CameraChain.camList[0].timeshiftCamToImuPrior
         print('  Saving landmark observation at {:.6f} time shift prior {} residual time shift {}'.format( \
                 frameTime, cself.CameraChain.camList[0].timeshiftCamToImuPrior, camTimeOffset))
-        imageCornerPoints = cself.CameraChain.getCornersImageSample(poseSplineDv, 0.0, cameraIndex, frameIndex)
+        imageCornerPoints = cself.CameraChain.getReprojectedCorners(poseSplineDv, 0.0, cameraIndex, frameIndex)
         targetCornerPoints = cself.CameraChain.getCornersTargetSample(cameraIndex, frameIndex)
         sampleImageCorners = "image_corners_{}_{}_check.txt".format(cameraIndex, frameIndex)
         sampleTargetCorners = "landmarks_{}_{}_check.txt".format(cameraIndex, frameIndex)

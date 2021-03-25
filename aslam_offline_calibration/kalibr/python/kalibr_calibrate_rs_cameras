@@ -121,6 +121,9 @@ def __parseArgs():
                                 help='Save sampled poses from the optimized B-splines?')
     outputSettings.add_argument('--project-poses-along', type=str, dest='projectPosesAlong', default="rz",
                                 help='Project the poses along the axis before saving them. Available options are (tx,ty,tz,rx,ry,rz)')
+    parser.add_argument('--reproject-frame-index', dest='reprojectFrameIndex', type=int, default=0,
+                        help='Zero-based index of the frame for reprojection in the frames used by calibration.')
+
     # print help if no argument is specified
     if len(sys.argv)==1:
         parser.print_help()
@@ -200,6 +203,7 @@ def main():
     config.chain_yaml = parsed.chain_yaml
     config.saveSamplePoses = parsed.saveSamplePoses
     config.projectPosesAlong = parsed.projectPosesAlong
+    config.reprojectFrameIndex = parsed.reprojectFrameIndex
 
     ######
     ## Calibrate
