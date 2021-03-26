@@ -26,7 +26,8 @@ def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c):
         return sm.Transformation(), False
 
     T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
-    sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c  
+
+    sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c
     return sm_T_w_c, True
 
 

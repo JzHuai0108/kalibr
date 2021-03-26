@@ -385,7 +385,6 @@ class RsCalibrator(object):
                     p_t = T_t_w * landmarks_expr[corner_id_list[index]]
 
                     # create the keypoint
-                    keypoint_index = frame.numKeypoints()
                     keypoint = acv.Keypoint2()
                     keypoint.setMeasurement(point)
                     inverseFeatureCovariance = self.__config.inverseFeatureCovariance
@@ -395,7 +394,7 @@ class RsCalibrator(object):
                     # create reprojection error
                     reprojection_error = self.__buildErrorTerm(
                         frame,
-                        keypoint_index,
+                        index,
                         p_t,
                         self.__camera_dv,
                         self.__poseSpline_dv
@@ -465,7 +464,11 @@ class RsCalibrator(object):
         # Global shutter projections
         # Build a transformation expression for the time.
         cameraTimeToImuTimeDv = aopt.Scalar(0.0)
-        halfSensorRows = self.__observations[0].imRows() / 2
+
+        proj = self.__camera_dv.projectionDesignVariable().value()
+        sensorRows = proj.rv()
+        halfSensorRows = sensorRows / 2
+
         lineDelay = self.__camera_dv.shutterDesignVariable().value().lineDelay()
         frameTime = cameraTimeToImuTimeDv.toExpression() + observation.time().toSec() + halfSensorRows * lineDelay
         frameTimeScalar = frameTime.toScalar()
@@ -483,6 +486,8 @@ class RsCalibrator(object):
         # Simple approach to reproject landmarks with float numbers.
         observation.set_T_t_c(sm.Transformation(T_w_c.toTransformationMatrix()))
         gsImageCornerProjected = np.array(observation.getCornerReprojection(self.__camera))  # Nx2
+        if gsImageCornerProjected.shape[0] == 0: # when simulated observations are used, the GS corners can be empty.
+            return np.concatenate((rsImageCornerProjected, imageCornerPoints), axis=1)
         return np.concatenate((rsImageCornerProjected, gsImageCornerProjected, imageCornerPoints), axis=1)
 
     def __buildErrorTerm(self, frame, keypoint_index, p_t, camera_dv, poseSpline_dv):

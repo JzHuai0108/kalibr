@@ -103,6 +103,7 @@ class VimapCsvReaderIterator(object):
 class VimapCsvReader(object):
     def __init__(self, folder, topic, from_to=None, perform_synchronization=False):
         self.folder = folder
+        self.bagfile = folder
         self.camera_index = int(topic[topic.find('image_raw') - 2])
         self.topic = topic
         self.from_to = from_to
