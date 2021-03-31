@@ -52,7 +52,7 @@ class RotationZ(object):
 
 
 class TranslationY(TranslationX):
-    def __init__(self, a = 0.85, b = 0.35, f = 0.15, axisIndex = 1):
+    def __init__(self, a = 0.7, b = 0.35, f = 0.15, axisIndex = 1):
         super(TranslationY, self).__init__(a, b, f, axisIndex)
 
 
@@ -79,13 +79,13 @@ def main():
 
     if parsed.axis == 0:
         sampler = TranslationX()
-        referencePose = [0.35, 0.35, 1.0, 1.0, 0, 0, 0]
+        referencePose = [0.35, 0.35, 1.5, 1.0, 0, 0, 0]
     elif parsed.axis == 1:
         sampler = TranslationY()
-        referencePose = [0.35, 0.35, 1.0, 1.0, 0, 0, 0]
+        referencePose = [0.35, 0.35, 1.5, 1.0, 0, 0, 0]
     elif parsed.axis == 2:
         sampler = TranslationZ()
-        referencePose = [0.35, 0.35, 1.0, 1.0, 0, 0, 0]
+        referencePose = [0.35, 0.35, 1.5, 1.0, 0, 0, 0]
     else:
         sampler = RotationZ(axisIndex = parsed.axis - 3)
         referencePose = [0.35, 0.35, 1.3, 1.0, 0, 0, 0]
