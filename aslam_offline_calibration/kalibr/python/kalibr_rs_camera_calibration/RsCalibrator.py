@@ -82,8 +82,6 @@ class RsCalibratorConfiguration(object):
 
     saveSamplePoses = False
 
-    projectPosesAlong = "rz"
-
     reprojectFrameIndex = 0
 
     def validate(self, isRollingShutter):
@@ -222,11 +220,6 @@ class RsCalibrator(object):
             print >> refPoseStream, "%poses {} Hz from the RS calibrator B-splines: time (sec), T_w_c (txyz, qxyzw).".format(rate)
             BSplineIO.sampleAndSaveBSplinePoses(samplePoseTimes, self.__poseSpline_dv, stream=refPoseStream)
             refPoseStream.close()
-
-            timeList, sm_T_w_c_list = BSplineIO.loadPoses("sampled_poses.txt")
-            projected_T_w_c_list = BSplineIO.projectPoses(sm_T_w_c_list, self.__config.projectPosesAlong)
-            projectedFile = "squashed_poses.txt"
-            BSplineIO.savePoses(timeList, projected_T_w_c_list, projectedFile)
 
 
     def __generateExtrinsicsInitialGuess(self):
