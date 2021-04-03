@@ -10,6 +10,8 @@ namespace sm { namespace kinematics {
     public:
       virtual ~RotationVector();
       virtual Eigen::Matrix3d parametersToRotationMatrix(const Eigen::Vector3d & parameters, Eigen::Matrix3d * S = NULL) const;
+      Eigen::Vector3d rotationMatrixToParametersClassic(const Eigen::Matrix3d & rotationMatrix) const;
+      Eigen::Vector3d rotationMatrixToParametersOriginal(const Eigen::Matrix3d & rotationMatrix) const;
       virtual Eigen::Vector3d rotationMatrixToParameters(const Eigen::Matrix3d & rotationMatrix) const;
       virtual Eigen::Matrix3d parametersToSMatrix(const Eigen::Vector3d & parameters) const;
       virtual Eigen::Vector3d angularVelocityAndJacobian(const Eigen::Vector3d & p, const Eigen::Vector3d & pdot, Eigen::Matrix<double,3,6> * Jacobian) const;    

@@ -55,10 +55,11 @@ namespace sm { namespace kinematics {
         }
 
         /**
-        https://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToAngle/index.htm
-        This requires a pure rotation matrix 'm' as input.
-        */
-        Eigen::Vector3d toAxisAngle(const Eigen::Matrix3d & m) {
+         * https://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToAngle/index.htm
+         * This requires a pure rotation matrix 'm' as input.
+         * rotationMatrixToParametersOriginal = - rotationMatrixToParametersClassic except for when the angle is close to PI.
+         */
+        Eigen::Vector3d RotationVector::rotationMatrixToParametersClassic(const Eigen::Matrix3d & m) const {
             double angle,x,y,z; // variables for result
             double epsilon = 0.01; // margin to allow for rounding errors
             double epsilon2 = 0.1; // margin to distinguish between 0 and 180 degrees
@@ -135,7 +136,11 @@ namespace sm { namespace kinematics {
 
         Eigen::Vector3d RotationVector::rotationMatrixToParameters(const Eigen::Matrix3d & C) const
         {
-            return toAxisAngle(C);
+            return rotationMatrixToParametersOriginal(C);
+        }
+        
+        Eigen::Vector3d RotationVector::rotationMatrixToParametersOriginal(const Eigen::Matrix3d & C) const
+        {
             Eigen::Vector3d p;
             // Sometimes, because of roundoff error, the value of tr ends up outside
             // the valid range of arccos. Truncate to the valid range.
