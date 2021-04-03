@@ -199,7 +199,7 @@ class VimapCsvReader(object):
             observation = acv.PnPObservation()
             frameObservation = self.targetObservations[index]
             corners = frameObservation.getCornersImageFrame()
-            if len(corners) > 0:
+            if len(corners) > 7:
                 observation.setCornersImageFrame(np.array(corners))
                 observation.setCornersTargetFrame(np.array(frameObservation.getCornersTargetFrame()))
                 observation.setCornersIdx(np.array(frameObservation.getCornersIdx()))

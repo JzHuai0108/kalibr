@@ -405,7 +405,7 @@ class RsCalibrator(object):
         The columns correspond to reprojected RS point, reprojected GS point, and the detected corner.
         """
         observation = self.__observations[frameIndex]
-        print("Found matching frame {} of time {}".format(frameIndex, observation.time().toSec()))
+        print("Reprojecting corners for frame {} at time {}.".format(frameIndex, observation.time().toSec()))
         imageCornerPoints = np.array(observation.getCornersImageFrame())  # Nx2
 
         # Rolling shutter projections
@@ -465,7 +465,6 @@ class RsCalibrator(object):
         lineDelay = self.__camera_dv.shutterDesignVariable().value().lineDelay()
         frameTime = cameraTimeToImuTimeDv.toExpression() + observation.time().toSec() + halfSensorRows * lineDelay
         frameTimeScalar = frameTime.toScalar()
-        print("frame time scalar {}".format(frameTimeScalar))
         # as we are applying an initial time shift outside the optimization so
         # we need to make sure that we dont add data outside the spline definition
         if frameTimeScalar <= self.__poseSpline_dv.spline().t_min() or frameTimeScalar >= self.__poseSpline_dv.spline().t_max():

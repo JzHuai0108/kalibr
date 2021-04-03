@@ -79,16 +79,16 @@ def main():
 
     if parsed.axis == 0:
         sampler = TranslationX()
-        referencePose = [0.35, 0.35, 1.5, 1.0, 0, 0, 0]
+        referencePose = [0.35, 0.35, 1.5, 0.9984003, -0.0399641, -0.0016026, -0.0399641]
     elif parsed.axis == 1:
         sampler = TranslationY()
-        referencePose = [0.35, 0.35, 1.5, 1.0, 0, 0, 0]
+        referencePose = [0.35, 0.35, 1.5, 0.9984003, -0.0399641, -0.0016026, -0.0399641]
     elif parsed.axis == 2:
         sampler = TranslationZ()
-        referencePose = [0.35, 0.35, 1.5, 1.0, 0, 0, 0]
+        referencePose = [0.35, 0.35, 1.5, 0.9984003, -0.0399641, -0.0016026, -0.0399641]
     else:
         sampler = RotationZ(axisIndex = parsed.axis - 3)
-        referencePose = [0.35, 0.35, 1.3, 1.0, 0, 0, 0]
+        referencePose = [0.35, 0.35, 1.3, 0.9984003, -0.0399641, -0.0016026, -0.0399641]
 
     times, poses = sampler.samplePoses(referencePose)
     with open(parsed.outputFile, 'w') as stream:
