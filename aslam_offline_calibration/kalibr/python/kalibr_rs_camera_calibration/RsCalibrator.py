@@ -19,6 +19,7 @@ from RsPlot import plotSplineValues
 import pylab as pl
 import pdb
 from kalibr_imu_camera_calibration import BSplineIO
+from kalibr_imu_camera_calibration import IccSensors as sens
 
 # make numpy print prettier
 np.set_printoptions(suppress=True)
@@ -26,6 +27,7 @@ np.set_printoptions(suppress=True)
 CALIBRATION_GROUP_ID = 0
 TRANSFORMATION_GROUP_ID = 1
 LANDMARK_GROUP_ID = 2
+HELPER_GROUP_ID = 3
 
 class RsCalibratorConfiguration(object):
     deltaX = 1e-8
@@ -91,6 +93,14 @@ class RsCalibratorConfiguration(object):
             self.estimateParameters['shutter'] = False
             self.adaptiveKnotPlacement = False
 
+
+class ImuDataDescription(object):
+    def __init__(self, bagfiles, bag_from_to, perform_sync):
+        self.bagfile = bagfiles
+        self.bag_from_to = bag_from_to
+        self.perform_synchronization = perform_sync
+
+
 class RsCalibrator(object):
 
     __observations = None
@@ -123,6 +133,10 @@ class RsCalibrator(object):
     __reprojection_errors = []
     """Reprojection errors of the latest optimizer iteration"""
 
+    __std_camera = None
+
+    __ImuList = None
+
     def calibrate(self,
         cameraGeometry,
         observations,
@@ -148,7 +162,6 @@ class RsCalibrator(object):
         self.__camera_dv = cameraGeometry.dv
         self.__camera = cameraGeometry.geometry
         self.__config = config
-        self.__std_camera = None
         self.__config.validate(self.__isRollingShutter())
 
         # obtain initial guesses for extrinsics and intrinsics
@@ -160,6 +173,11 @@ class RsCalibrator(object):
 
         # set the value for the motion prior term or uses the defaults
         W = self.__getMotionModelPriorOrDefault()
+
+        times = [observation.time().toSec() for observation in self.__observations]
+        times = np.sort(times)
+        deltaTimes = np.diff(times)
+        self.__config.framerate = 1.0 / np.median(deltaTimes)
 
         self.__poseSpline = self.__generateInitialSpline(
             self.__config.splineOrder,
@@ -293,10 +311,67 @@ class RsCalibrator(object):
             knots = int(round(seconds * framerate/3))
 
         print
-        print "Initializing a pose spline with %d knots (%f knots per second over %f seconds)" % ( knots, 100, seconds)
+        print "Initializing a pose spline with %d knots (%f knots per second over %f seconds)" % ( knots, knots/seconds, seconds)
         poseSpline.initPoseSplineSparse(times, curve, knots, 1e-4)
-
         return poseSpline
+
+
+    def loadImu(self, imu_yaml, imu_model, bagfile, bag_from_to, perform_sync):
+        if imu_yaml is None:
+            self.__ImuList = None
+            return
+        imus = list()
+        imuConfig = kc.ImuParameters(imu_yaml)
+        imuConfig.printDetails()
+
+        imu_data = ImuDataDescription([bagfile], bag_from_to, perform_sync)
+        if imu_model != "calibrated":
+            raise Exception("Only calibrated IMU model is supported for simplicity!")
+        imus.append(sens.IccImu(imuConfig, imu_data, isReferenceImu=True, estimateTimedelay=False))
+        self.__ImuList = imus
+
+
+    def __addImuErrors(self, problem):
+        poseSpline = self.__poseSpline_dv.spline()
+        for imu in self.__ImuList:
+            splineOrder = 4
+            biasKnotsPerSecond = 5
+            imu.initBiasSplines(poseSpline, splineOrder, biasKnotsPerSecond)
+
+        # estimate gravity in the world coordinate frame as the mean specific force.
+        R_i_c = np.identity(3)
+        if self.__config.chain_yaml:
+            camchain = kc.CameraChainParameters(self.__config.chain_yaml)
+            T_cam_imu = camchain.getExtrinsicsImuToCam(0)
+            T_imu_cam = T_cam_imu.inverse()
+            R_i_c = sm.quat2r(T_imu_cam.q())
+
+        a_w = []
+        for im in self.__ImuList[0].imuData:
+            tk = im.stamp.toSec()
+            if tk > poseSpline.t_min() and tk < poseSpline.t_max():
+                a_w.append(np.dot(poseSpline.orientation(tk), np.dot(R_i_c, - im.alpha)))
+        mean_a_w = np.mean(np.asarray(a_w).T, axis=1)
+        gravity_w = mean_a_w / np.linalg.norm(mean_a_w) * 9.80655
+        print("Gravity was intialized to {} [m/s^2]".format(gravity_w))
+
+        # Add the calibration target orientation design variable. (expressed as gravity vector in target frame)
+        self.gravityDv = aopt.EuclideanDirection(gravity_w)
+        self.gravityExpression = self.gravityDv.toExpression()
+        self.gravityDv.setActive(True)
+        problem.addDesignVariable(self.gravityDv, HELPER_GROUP_ID)
+
+        for imu in self.__ImuList:
+            imu.addDesignVariables(problem)
+
+        huberAccel = -1
+        huberGyro = -1
+        gyroNoiseScale = 1.0
+        accelNoiseScale = 1.0
+        for imu in self.__ImuList:
+            imu.addAccelerometerErrorTerms(problem, self.__poseSpline_dv, self.gravityExpression, mSigma=huberAccel, accelNoiseScale=accelNoiseScale)
+            imu.addGyroscopeErrorTerms(problem, self.__poseSpline_dv, mSigma=huberGyro, gyroNoiseScale=gyroNoiseScale, g_w=self.gravityExpression)
+            imu.addBiasMotionTerms(problem)
 
     def __buildOptimizationProblem(self, W):
         """Build the optimisation problem"""
@@ -345,6 +420,10 @@ class RsCalibrator(object):
 
         #####
         # Regularization term / motion prior
+        if self.__ImuList:
+            self.__addImuErrors(problem)
+            W *= 1e-2
+
         motionError = asp.BSplineMotionError(self.__poseSpline_dv, W)
         problem.addErrorTerm(motionError)
 
@@ -571,6 +650,7 @@ class RsCalibrator(object):
         return status
 
     def recoverCovariance(self, problem):
+        """Computing covariance takes so long because of the complex prior BSplineMotionError"""
         #Covariance ordering (=dv ordering)
         #ORDERING:   N=num cams
         #            camera -->  sum(sub) * N

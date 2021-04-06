@@ -87,7 +87,6 @@ def __parseArgs():
     parser = KalibrArgParser(description='Calibrate the intrinsics of a single rolling shutter camera.', usage=usage)
     parser.add_argument('--model', dest='model', help='The camera model to estimate. '
                         'Currently supported models are {0}, where the suffix \'-rs\' identifies rolling shutter models.'.format(', '.join(cameraModels.keys())), required=True)
-    parser.add_argument('--frame-rate', dest='framerate', type=int, help='Approximate framerate of the camera.', required=True)
 
     groupSource = parser.add_argument_group('Data source')
     groupSource.add_argument('--bag', dest='bagfile', help='The bag file with the data.')
@@ -113,6 +112,12 @@ def __parseArgs():
     groupCam = parser.add_argument_group('Camera system configuration')
     groupCam.add_argument('--cams', dest='chain_yaml', help=('Camera system configuration as yaml file.\n'
         'If camera yaml is provided, then values from the yaml will be used for initializing the camera'), required=False)
+    groupImu = parser.add_argument_group('IMU configuration')
+    groupImu.add_argument('--imu', dest='imu_yaml', help=('Yaml holding the IMU noise parameters.'
+            ' Thanks to the ConfigReader, no hierarchy should be used in the yaml.'))
+    groupImu.add_argument('--imu-model', dest='imu_model', help= \
+            ('The IMU models to estimate. Currently supported are \'calibrated\','
+             ' \'scale-misalignment\' and \'scale-misalignment-size-effect\'.'), default="calibrated")
 
     outputSettings = parser.add_argument_group('Output options')
     outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Enable (really) verbose output (disables plots).')
@@ -193,7 +198,6 @@ def main():
     config = rscc.RsCalibratorConfiguration()
     config.inverseFeatureCovariance = 1.0/parsed.featureVariance
     config.maxNumberOfIterations = parsed.max_iter
-    config.framerate = parsed.framerate
     config.timeOffsetConstantSparsityPattern = parsed.timeoffset_pattern
     config.timeOffsetPadding = parsed.timeoffset_padding
     config.estimateParameters['intrinsics'] = not parsed.lock_intrinsics
@@ -205,6 +209,7 @@ def main():
     ######
     ## Calibrate
     calibrator = rscc.RsCalibrator()
+    calibrator.loadImu(parsed.imu_yaml, parsed.imu_model, parsed.bagfile, parsed.bag_from_to, False)
     tic = time.time()
     calibrator.calibrate(cameraGeometry, observations, config)
     toc = time.time()
