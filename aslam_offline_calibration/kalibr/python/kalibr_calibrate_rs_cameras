@@ -100,7 +100,8 @@ def __parseArgs():
     groupOpt = parser.add_argument_group('Optimization options')
     groupOpt.add_argument('--max-iter', type=int, default=30, dest='max_iter', help='Max. iterations (default: %(default)s).', required=False)
     groupOpt.add_argument('--lock-intrinsics', action='store_true', dest='lock_intrinsics', help='Disable the intrinsics calibration', required=False)      
-    groupOpt.add_argument('--lock-distortion', action='store_true', dest='lock_distortion', help='Disable the distortion calibration', required=False)      
+    groupOpt.add_argument('--lock-distortion', action='store_true', dest='lock_distortion', help='Disable the distortion calibration', required=False)
+    groupOpt.add_argument('--time-calibration', action='store_true', dest='time_calibration', help='Enable time shift cam_imu calibration', required=False)
     groupOpt.add_argument('--timeoffset-padding', type=float, default=0.5, dest='timeoffset_padding',
                           help='Maximum range in which the timeoffset may change during estimation [s] '
                                '(default: %(default)s)', required=False)
@@ -202,6 +203,7 @@ def main():
     config.timeOffsetPadding = parsed.timeoffset_padding
     config.estimateParameters['intrinsics'] = not parsed.lock_intrinsics
     config.estimateParameters['distortion'] = not parsed.lock_distortion
+    config.estimateParameters['timeOffset'] = parsed.time_calibration and (parsed.imu_yaml is not None)
     config.chain_yaml = parsed.chain_yaml
     config.saveSamplePoses = parsed.saveSamplePoses
     config.reprojectFrameIndex = parsed.reprojectFrameIndex

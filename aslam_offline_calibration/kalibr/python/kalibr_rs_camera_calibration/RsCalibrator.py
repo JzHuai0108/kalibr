@@ -137,6 +137,8 @@ class RsCalibrator(object):
 
     __ImuList = None
 
+    __imageHeight = 0
+
     def calibrate(self,
         cameraGeometry,
         observations,
@@ -261,6 +263,8 @@ class RsCalibrator(object):
             camchain = kc.CameraChainParameters(self.__config.chain_yaml)
             camConfig = camchain.getCameraParameters(0)
             aslamCamera = kc.AslamCamera.fromParameters(camConfig)
+            resolution = camConfig.getResolution()
+            self.__imageHeight = resolution[1]
             self.__camera = aslamCamera.geometry
             self.__camera_dv = self.__cameraModelFactory.designVariable(self.__camera)
             status = True
@@ -268,7 +272,7 @@ class RsCalibrator(object):
                 self.__camera.getParameters(True, True, True).T))
         else:
             if self.__isRollingShutter():
-                sensorRows = self.__observations[0].imRows()
+                self.__imageHeight = self.__observations[0].imRows()
                 self.__camera.shutter().setParameters(np.array([1.0 / self.__config.framerate / float(sensorRows)]))
             status = self.__camera.initializeIntrinsics(self.__observations)
             print('Initial projection and distortion parameters {}'.format(self.__camera.getParameters(True, True, True).T))
@@ -423,9 +427,17 @@ class RsCalibrator(object):
         if self.__ImuList:
             self.__addImuErrors(problem)
             W *= 1e-2
+        # Add the time delay design variable.
+        self.cameraTimeToImuTimeDv = aopt.Scalar(0.0)
+        self.cameraTimeToImuTimeDv.setActive(self.__config.estimateParameters['timeOffset'])
+        problem.addDesignVariable(self.cameraTimeToImuTimeDv, CALIBRATION_GROUP_ID)
+
 
         motionError = asp.BSplineMotionError(self.__poseSpline_dv, W)
         problem.addErrorTerm(motionError)
+
+        dummyPoint = np.array([0, self.__imageHeight / 2])
+        centerRowTemporalOffset = self.__camera_dv.temporalOffset(dummyPoint)
 
         #####
         # add a reprojection error for every corner of each observation
@@ -443,7 +455,8 @@ class RsCalibrator(object):
                 corner_id_list = observation.getCornersIdx()
                 for index, point in enumerate(observation.getCornersImageFrame()):
                     # keypoint time offset by line delay as expression type
-                    keypoint_time = self.__camera_dv.keypointTime(frame.time(), point)
+                    keypoint_time = self.cameraTimeToImuTimeDv.toExpression() + \
+                                    self.__camera_dv.keypointTime(frame.time(), point) - centerRowTemporalOffset
 
                     # from target to world transformation.
                     T_w_t = self.__poseSpline_dv.transformationAtTime(
@@ -679,6 +692,7 @@ class RsCalibrator(object):
         shutter = self.__camera_dv.shutterDesignVariable().value()
         proj = self.__camera_dv.projectionDesignVariable().value()
         dist = self.__camera_dv.distortionDesignVariable().value()
+        dt = self.cameraTimeToImuTimeDv.toScalar()
         print('\n')
         if not self.__std_camera:
             if (self.__isRollingShutter()):
@@ -694,6 +708,7 @@ class RsCalibrator(object):
             print("Intrinsics: {} +/- {}".format(p, self.__std_camera[1:1+p.shape[0]]))
             d = dist.getParameters().flatten()
             print("Distortion: {} +/- {}".format(d, self.__std_camera[1+p.shape[0]:]))
+        print("timeshift_cam_imu: {}".format(dt))
 
     def __saveParametersYaml(self):
         # Create new config file
