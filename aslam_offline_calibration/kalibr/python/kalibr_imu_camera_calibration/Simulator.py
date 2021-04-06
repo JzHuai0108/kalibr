@@ -464,9 +464,12 @@ class RsCameraImuSimulator(RsCameraSimulator):
     '''
     def __init__(self, args):
         super(RsCameraImuSimulator, self).__init__(args)
-        self.gyroBiasSplineDv = BSplineIO.loadBSpline(args.gyro_bias_file)
-        self.accBiasSplineDv = BSplineIO.loadBSpline(args.acc_bias_file)
         self.biasFromSplines = args.biasFromSplines
+        self.gyroBiasSplineDv = None
+        self.accBiasSplineDv = None
+        if self.biasFromSplines:
+            self.gyroBiasSplineDv = BSplineIO.loadBSpline(args.gyro_bias_file)
+            self.accBiasSplineDv = BSplineIO.loadBSpline(args.acc_bias_file)
 
         chain = kc.CameraChainParameters(args.chain_yaml)
         camNr = 0
@@ -481,10 +484,14 @@ class RsCameraImuSimulator(RsCameraSimulator):
 
 
     def generateStateTimes(self, rate, timePadding):
-        tmin = max(self.poseSplineDv.spline().t_min(), self.gyroBiasSplineDv.spline().t_min(),
-                self.accBiasSplineDv.spline().t_min()) + timePadding
-        tmax = min(self.poseSplineDv.spline().t_max(), self.gyroBiasSplineDv.spline().t_max(),
-                self.accBiasSplineDv.spline().t_max()) - timePadding
+        if self.gyroBiasSplineDv:
+            tmin = max(self.poseSplineDv.spline().t_min(), self.gyroBiasSplineDv.spline().t_min(),
+                    self.accBiasSplineDv.spline().t_min()) + timePadding
+            tmax = min(self.poseSplineDv.spline().t_max(), self.gyroBiasSplineDv.spline().t_max(),
+                    self.accBiasSplineDv.spline().t_max()) - timePadding
+        else:
+            tmin = self.poseSplineDv.spline().t_min() + timePadding
+            tmax = self.poseSplineDv.spline().t_max() - timePadding
         return self.generateSampleTimes(tmin, tmax, rate)
 
     def simulateImuDataAtTimes(self, trueImuTimes):
@@ -507,9 +514,6 @@ class RsCameraImuSimulator(RsCameraSimulator):
         imuData = np.zeros((len(trueImuTimes), 6))
         imuBiases = np.zeros((len(trueImuTimes), 6))
 
-        gyroSpline = self.gyroBiasSplineDv.spline()
-        accSpline = self.accBiasSplineDv.spline()
-
         gyroNoiseDiscrete, gyroNoise, gyroWalk = self.imuConfig.getGyroStatistics()
         accNoiseDiscrete, accNoise, accWalk = self.imuConfig.getAccelerometerStatistics()
         Rgyro = np.eye(3) * gyroNoiseDiscrete * gyroNoiseDiscrete
@@ -520,12 +524,13 @@ class RsCameraImuSimulator(RsCameraSimulator):
         for index, tk in enumerate(trueImuTimes):
             # GyroscopeError(measurement, invR, angularVelocity, bias)
             w_b = self.poseSplineDv.angularVelocityBodyFrame(tk)
-            b_i = self.gyroBiasSplineDv.toEuclideanExpression(tk,0)
             C_i_b = q_i_b_Dv.toExpression()
             w = C_i_b * w_b
             if self.biasFromSplines:
+                b_i = self.gyroBiasSplineDv.toEuclideanExpression(tk, 0)
                 gerr = ket.EuclideanError(omegaDummy, omegaInvR * weightDummy, w + b_i)
                 omega = gerr.getPredictedMeasurement()
+                gyroSpline = self.gyroBiasSplineDv.spline()
                 gyroBias = gyroSpline.eval(tk)
             else:
                 gerr = ket.EuclideanError(omegaDummy, omegaInvR * weightDummy, w)
@@ -534,7 +539,6 @@ class RsCameraImuSimulator(RsCameraSimulator):
 
             C_b_w = self.poseSplineDv.orientation(tk).inverse()
             a_w = self.poseSplineDv.linearAcceleration(tk)
-            b_i = self.accBiasSplineDv.toEuclideanExpression(tk,0)
             w_b = self.poseSplineDv.angularVelocityBodyFrame(tk)
             w_dot_b = self.poseSplineDv.angularAccelerationBodyFrame(tk)
             C_i_b = q_i_b_Dv.toExpression()
@@ -542,8 +546,10 @@ class RsCameraImuSimulator(RsCameraSimulator):
             a = C_i_b * (C_b_w * (a_w - gravityExpression) + \
                             w_dot_b.cross(r_b) + w_b.cross(w_b.cross(r_b)))
             if self.biasFromSplines:
+                b_i = self.accBiasSplineDv.toEuclideanExpression(tk, 0)
                 aerr = ket.EuclideanError(alphaDummy, alphaInvR * weightDummy, a + b_i)
                 alpha = aerr.getPredictedMeasurement()
+                accSpline = self.accBiasSplineDv.spline()
                 accBias = accSpline.eval(tk)
             else:
                 aerr = ket.EuclideanError(alphaDummy, alphaInvR * weightDummy, a)
@@ -591,8 +597,11 @@ class RsCameraImuSimulator(RsCameraSimulator):
             trueFrameTimes[0], trueFrameTimes[-1]))
         vertexCsv = os.path.join(outputDir, "vertices.csv")
         with open(vertexCsv, 'w') as vertexStream:
-            BSplineIO.saveStates(trueFrameTimes, self.poseSplineDv, self.gyroBiasSplineDv.spline(),
-                                 self.accBiasSplineDv.spline(), self.timeOffset, vertexStream)
+            if self.gyroBiasSplineDv:
+                BSplineIO.saveStates(trueFrameTimes, self.poseSplineDv, self.gyroBiasSplineDv.spline(),
+                                     self.accBiasSplineDv.spline(), self.timeOffset, vertexStream)
+            else:
+                BSplineIO.saveStates(trueFrameTimes, self.poseSplineDv, None, None, self.timeOffset, vertexStream)
             print("  Written simulated states to {}".format(vertexCsv))
         return trueFrameTimes
 

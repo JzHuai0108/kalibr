@@ -70,9 +70,12 @@ def sampleBSplines(stateTimes, poseSplineDv, gyroBiasSpline, accBiasSpline, time
     states = np.zeros((len(stateTimes),16))
     measuredTimes = np.zeros(len(stateTimes))
     frameIds = np.zeros(len(stateTimes), dtype=np.int32)
-
-    tmin = max(poseSplineDv.spline().t_min(), gyroBiasSpline.t_min(), accBiasSpline.t_min())
-    tmax = min(poseSplineDv.spline().t_max(), gyroBiasSpline.t_max(), accBiasSpline.t_max())
+    if gyroBiasSpline:
+        tmin = max(poseSplineDv.spline().t_min(), gyroBiasSpline.t_min(), accBiasSpline.t_min())
+        tmax = min(poseSplineDv.spline().t_max(), gyroBiasSpline.t_max(), accBiasSpline.t_max())
+    else:
+        tmin = poseSplineDv.spline().t_min()
+        tmax = poseSplineDv.spline().t_max()
 
     timeOffsetPadding = 0.0
     frameId = 0
@@ -85,8 +88,12 @@ def sampleBSplines(stateTimes, poseSplineDv, gyroBiasSpline, accBiasSpline, time
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
         sm_T_w_b = sm.Transformation(T_w_b.toTransformationMatrix())
         v_w = poseSplineDv.linearVelocity(time).toEuclidean()
-        gyro_bias = gyroBiasSpline.eval(time)
-        acc_bias = accBiasSpline.eval(time)
+        if gyroBiasSpline:
+            gyro_bias = gyroBiasSpline.eval(time)
+            acc_bias = accBiasSpline.eval(time)
+        else:
+            gyro_bias = np.zeros(3)
+            acc_bias = np.zeros(3)
         frameIds[frameId] = frameId
         measuredTimes[frameId] = time - timeOffset
         states[frameId, 0:3] = sm_T_w_b.t()

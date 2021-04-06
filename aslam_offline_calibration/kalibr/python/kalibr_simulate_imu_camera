@@ -121,16 +121,15 @@ def main():
         parsed.acc_bias_file = parsed.pose_file.replace('pose', 'acc_bias', 1)
 
     if parsed.imu_yaml and not parsed.imu_model:
-        #Maintain backwards compatibility with previous interface.
         parsed.imu_model = 'calibrated'
 
-    print("Loading B splines...")
-    if parsed.imu_model:
+    if parsed.imu_yaml:
         simulator = Simulator.RsCameraImuSimulator(parsed)
     else:
         simulator = Simulator.RsCameraSimulator(parsed)
     simulator.checkNaiveVsNewtonRsProjection(parsed.output_dir)
     simulator.simulate(parsed.output_dir)
+
 
 if __name__ == "__main__":
     main()
