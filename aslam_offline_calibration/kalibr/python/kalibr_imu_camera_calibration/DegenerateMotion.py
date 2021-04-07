@@ -52,7 +52,7 @@ class RotationZ(object):
 
 
 class TranslationY(TranslationX):
-    def __init__(self, a = 0.7, b = 0.35, f = 0.15, axisIndex = 1):
+    def __init__(self, a = 0.7, b = 0.25, f = 0.15, axisIndex = 1):
         super(TranslationY, self).__init__(a, b, f, axisIndex)
 
 
