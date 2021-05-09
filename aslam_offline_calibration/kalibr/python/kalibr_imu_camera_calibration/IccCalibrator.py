@@ -78,7 +78,8 @@ class IccCalibrator(object):
         self.ImuList.append( sensor )
             
     def buildProblem( self, 
-                      splineOrder=6, 
+                      splineOrder=6,
+                      biasSplineOrder=4,
                       poseKnotsPerSecond=70, 
                       biasKnotsPerSecond=70, 
                       doPoseMotionError=False, 
@@ -96,6 +97,7 @@ class IccCalibrator(object):
                       verbose=False  ):
 
         print "\tSpline order: %d" % (splineOrder)
+        print "\tBias spline order: %d" % (biasSplineOrder)
         print "\tPose knots per second: %d" % (poseKnotsPerSecond)
         print "\tDo pose motion regularization: %s" % (doPoseMotionError)
         print "\t\txddot translation variance: %f" % (mrTranslationVariance)
@@ -139,7 +141,7 @@ class IccCalibrator(object):
         
         # Initialize bias splines for all IMUs
         for imu in self.ImuList:
-            imu.initBiasSplines(poseSpline, splineOrder, biasKnotsPerSecond)
+            imu.initBiasSplines(poseSpline, biasSplineOrder, biasKnotsPerSecond)
         
         # Now I can build the problem
         problem = inc.CalibrationOptimizationProblem()
