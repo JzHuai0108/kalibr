@@ -1,4 +1,6 @@
 #encoding:UTF-8
+import time
+
 import sm
 import aslam_backend as aopt
 import aslam_cv_backend as acvb
@@ -85,6 +87,8 @@ class RsCalibratorConfiguration(object):
     saveSamplePoses = False
 
     reprojectFrameIndex = 0
+
+    recoverCov = False
 
     def validate(self, isRollingShutter):
         """Validate the configuration."""
@@ -191,7 +195,7 @@ class RsCalibrator(object):
         # build estimator problem
         optimisation_problem = self.__buildOptimizationProblem(W)
 
-        self.__runOptimization(
+        status = self.__runOptimization(
             optimisation_problem,
             self.__config.deltaJ,
             self.__config.deltaX,
@@ -217,7 +221,7 @@ class RsCalibrator(object):
                 self.__poseSpline = knotUpdateStrategy.getUpdatedSpline(self.__poseSpline_dv.spline(), knots, self.__config.splineOrder)
 
                 optimisation_problem = self.__buildOptimizationProblem(W)
-                self.__runOptimization(
+                status = self.__runOptimization(
                     optimisation_problem,
                     self.__config.deltaJ,
                     self.__config.deltaX,
@@ -229,6 +233,8 @@ class RsCalibrator(object):
 
         self.__printResults()
         self.__saveParametersYaml()
+        if status and self.__config.recoverCov:
+            self.recoverCovariance(optimisation_problem)
 
     def __saveBSplinePoses(self):
             bspline = self.__poseSpline_dv.spline()
@@ -657,9 +663,6 @@ class RsCalibrator(object):
             corners = self.getReprojectedCorners(self.__config.reprojectFrameIndex)
             np.savetxt("reprojected_corners_{}.txt".format(self.__config.reprojectFrameIndex), corners)
 
-        recoverCov = False
-        if status and recoverCov:
-            self.recoverCovariance(problem)
         return status
 
     def recoverCovariance(self, problem):
@@ -670,10 +673,13 @@ class RsCalibrator(object):
         #                a) shutter    --> 1
         #                b) projection --> omni:5, pinhole: 4
         #                c) distortion --> 4
+        tic = time.time()
         estimator = inc.IncrementalEstimator(CALIBRATION_GROUP_ID)
         rval = estimator.addBatch(problem, True)
         est_stds = np.sqrt(estimator.getSigma2Theta().diagonal())
-
+        toc = time.time()
+        elapsed = toc - tic
+        print("Covariance recovery takes {} secs".format(elapsed))
         #split and store the variance
         std_camera = list()
         offset=0
@@ -683,7 +689,7 @@ class RsCalibrator(object):
         std_camera.extend(est_stds[offset:offset+nt].flatten().tolist())
         offset = offset+nt
         self.__std_camera = std_camera
-        print('std_camera: {}'.format(std_camera)) 
+        print('std_camera: {}'.format(std_camera))
 
     def __isRollingShutter(self):
         return self.__cameraModelFactory.shutterType == acv.RollingShutter

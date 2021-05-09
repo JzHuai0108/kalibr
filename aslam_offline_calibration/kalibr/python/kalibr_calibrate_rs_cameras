@@ -99,6 +99,8 @@ def __parseArgs():
 
     groupOpt = parser.add_argument_group('Optimization options')
     groupOpt.add_argument('--max-iter', type=int, default=30, dest='max_iter', help='Max. iterations (default: %(default)s).', required=False)
+    groupOpt.add_argument('--recover-covariance', action='store_true', dest='recover_cov',
+                          help='Recover the covariance of the design variables.', required=False)
     groupOpt.add_argument('--lock-intrinsics', action='store_true', dest='lock_intrinsics', help='Disable the intrinsics calibration', required=False)      
     groupOpt.add_argument('--lock-distortion', action='store_true', dest='lock_distortion', help='Disable the distortion calibration', required=False)
     groupOpt.add_argument('--time-calibration', action='store_true', dest='time_calibration', help='Enable time shift cam_imu calibration', required=False)
@@ -201,6 +203,7 @@ def main():
     config.maxNumberOfIterations = parsed.max_iter
     config.timeOffsetConstantSparsityPattern = parsed.timeoffset_pattern
     config.timeOffsetPadding = parsed.timeoffset_padding
+    config.recoverCov = parsed.recover_cov
     config.estimateParameters['intrinsics'] = not parsed.lock_intrinsics
     config.estimateParameters['distortion'] = not parsed.lock_distortion
     config.estimateParameters['timeOffset'] = parsed.time_calibration and (parsed.imu_yaml is not None)

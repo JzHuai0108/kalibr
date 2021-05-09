@@ -1,3 +1,5 @@
+import time
+
 import aslam_backend as aopt
 import aslam_splines as asp
 import IccUtil as util
@@ -213,9 +215,13 @@ class IccCalibrator(object):
         print("Recovering covariance is problematic because evaluation of Jacobians of\n"
               "BSpline MotionErrors for IMU biases is not implemented. Despite these\n"
               "void Jacobians, the computation for covariance takes too long!")
+        tic = time.time()
         estimator = inc.IncrementalEstimator(CALIBRATION_GROUP_ID)
         rval = estimator.addBatch(self.problem, True)    
         est_stds = np.sqrt(estimator.getSigma2Theta().diagonal())
+        toc = time.time()
+        elapsed = toc - tic
+        print("Covariance recovery takes {} secs".format(elapsed))
 
         #split and store the variance
         self.std_trafo_ic = np.array(est_stds[0:6])
