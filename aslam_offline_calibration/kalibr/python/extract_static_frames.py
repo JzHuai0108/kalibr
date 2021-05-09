@@ -1,0 +1,375 @@
+#!/usr/bin/env python
+
+"""
+extract frames at static periods of an image stream.
+Being static and free from rolling shutter distortion, these frames can be used for calibrating intrinsic parameters of
+a rolling shutter camera.
+"""
+
+import argparse
+import signal
+import sys
+import numpy as np
+
+import rosbag
+
+import aslam_cv_backend as acvb
+import kalibr_common as kc
+from kalibr_common import ConfigReader as cr
+import kalibr_camera_calibration as kcc
+from kalibr_imu_camera_calibration import sens, BSplineIO, IccCalibratorConfiguration, IccCalibrator
+import sm
+
+def parseArgs():
+    parser = argparse.ArgumentParser()
+    groupData = parser.add_argument_group('Dataset source')
+    groupData.add_argument('bagfile', help='Ros bag file containing image and imu data (rostopics specified in the yamls)')
+    parser.add_argument('--models', nargs='+', dest='models',
+                        help='The camera model {0} to estimate'.format(cameraModels.keys()), required=True)
+
+    groupData.add_argument('--bag-from-to', metavar='bag_from_to', type=float, nargs=2,
+                           help='Use the bag data starting from up to this time [s]')
+    # groupData.add_argument('--perform-synchronization', action='store_true', dest='perform_synchronization',
+    #                        help='Perform a clock synchronization according to \'Clock synchronization algorithms for '
+    #                             'network measurements\' by Zhang et al. (2002).')
+    parser.add_argument('--topics', nargs='+', type=str, default=["/cam0/image_raw"], dest='topics',
+                        help='The image topics within the input rosbag')
+    parser.add_argument('--imu-topic', type=str, default="/imu0", dest='imu_topic',
+                        help='The IMU topic of the input rosbag')
+
+    groupTarget = parser.add_argument_group('Calibration target')
+    groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file')
+
+    groupOpt = parser.add_argument_group('Selection options')
+
+    groupOpt.add_argument('--max-accel', type=float, default=0.5, dest='max_accel',
+                          help='Maximum deviation of the norm of linear acceleration from gravity=9.80665 %(default)s)')
+    groupOpt.add_argument('--max-omega', type=float, default=0.2, dest='max_omega',
+                          help='Maximum norm of angular rate %(default)s)')
+
+    outputSettings = parser.add_argument_group('Output options')
+    outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Enable (really) verbose output (disables plots)')
+    outputSettings.add_argument('--show-extraction', action='store_true', dest='showextraction', help='Show the calibration target extraction. (disables plots)')
+    outputSettings.add_argument('--output-bag', type=str, default="", dest='output_bag',
+                        help='output bag file containing the selected frames')
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(2)
+    return parser.parse_args()
+
+def initBagDataset(bagfile, topic, from_to):
+    print "\tDataset:          {0}".format(bagfile)
+    print "\tTopic:            {0}".format(topic)
+    reader = kc.BagImageDatasetReader(bagfile, topic, bag_from_to=from_to)
+    print "\tNumber of images: {0}".format(reader.numImages())
+    return reader
+
+#available models
+cameraModels = { 'pinhole-radtan': acvb.DistortedPinhole,
+                 'pinhole-equi':   acvb.EquidistantPinhole,
+                 'pinhole-fov':    acvb.FovPinhole,
+                 'omni-none':      acvb.Omni,
+                 'omni-radtan':    acvb.DistortedOmni,
+                 'eucm-none':      acvb.ExtendedUnified,
+                 'ds-none':        acvb.DoubleSphere}
+
+def signal_exit(signal, frame):
+    sm.logWarn("Shutdown requested! (CTRL+C)")
+    sys.exit(2)
+
+
+def initializeCameraIntrinsics(bagfile, image_topics, models, target_yaml, bag_from_to, showextraction, verbose):
+    targetConfig = kc.CalibrationTargetParameters(target_yaml)
+
+    # create camera objects, initialize the intrinsics and extract targets
+    cameraList = list()
+    numCams = len(image_topics)
+
+    for cam_id in range(0, numCams):
+        topic = image_topics[cam_id]
+        modelName = models[cam_id]
+        print("Initializing cam{0}:".format(cam_id))
+        print("\tCamera model:\t  {0}".format(modelName))
+
+        if modelName in cameraModels:
+            # open dataset
+            dataset = initBagDataset(bagfile, topic, bag_from_to)
+
+            # create camera
+            cameraModel = cameraModels[modelName]
+            cam = kcc.CameraGeometry(cameraModel, targetConfig, dataset,
+                                     verbose=(verbose or showextraction))
+
+            # extract the targets
+            multithreading = not (verbose or showextraction)
+            observations = kc.extractCornersFromDataset(cam.dataset, cam.ctarget.detector,
+                                                        multithreading=multithreading, clearImages=False,
+                                                        noTransformation=True)
+
+            # initialize the intrinsics
+            if not cam.initGeometryFromObservations(observations):
+                raise RuntimeError("Could not initialize the intrinsics for camera with topic: {0}. "
+                                   "Try to use --verbose and check whether the calibration target"
+                                   " extraction is successful.".format(topic))
+
+            print("\tProjection initialized to: %s" % cam.geometry.projection().getParameters().flatten())
+            print("\tDistortion initialized to: %s" % cam.geometry.projection().distortion().getParameters().flatten())
+
+            cameraList.append(cam)
+        else:
+            raise RuntimeError("Unknown camera model: {0}. Try {1}.".format(modelName, cameraModels.keys()))
+    return cameraList
+
+
+def saveCameraIntrinsics(cameraList, imageTopics, resultFile):
+    """WITHOUT OVERLAP or EXTRINSICS."""
+    cameraModelNames = {acvb.DistortedPinhole: 'pinhole',
+                    acvb.EquidistantPinhole: 'pinhole',
+                    acvb.FovPinhole: 'pinhole',
+                    acvb.Omni: 'omni',
+                    acvb.DistortedOmni: 'omni',
+                    acvb.ExtendedUnified: 'eucm',
+                    acvb.DoubleSphere: 'ds'}
+    distortionModels = {acvb.DistortedPinhole: 'radtan',
+                        acvb.EquidistantPinhole: 'equidistant',
+                        acvb.FovPinhole: 'fov',
+                        acvb.Omni: 'none',
+                        acvb.DistortedOmni: 'radtan',
+                        acvb.ExtendedUnified: 'none',
+                        acvb.DoubleSphere: 'none'}
+
+    chain = cr.CameraChainParameters(resultFile, createYaml=True)
+    for cam_id, cam in enumerate(cameraList):
+        cameraModel = cameraModelNames[cam.model]
+        distortionModel = distortionModels[cam.model]
+
+        # create new config file
+        camParams = cr.CameraParameters(resultFile, createYaml=True)
+        camParams.setRosTopic(imageTopics[cam_id])
+
+        # set the data
+        P = cam.geometry.projection()
+        if cameraModel == 'omni':
+            camParams.setIntrinsics(cameraModel, [P.xi(), P.fu(), P.fv(), P.cu(), P.cv()])
+        elif cameraModel == 'pinhole':
+            camParams.setIntrinsics(cameraModel, [P.fu(), P.fv(), P.cu(), P.cv()])
+        elif cameraModel == 'eucm':
+            camParams.setIntrinsics(cameraModel, [P.alpha(), P.beta(), P.fu(), P.fv(), P.cu(), P.cv()])
+        elif cameraModel == 'ds':
+            camParams.setIntrinsics(cameraModel, [P.xi(), P.alpha(), P.fu(), P.fv(), P.cu(), P.cv()])
+        else:
+            raise RuntimeError("Invalid camera model {}.".format(cameraModel))
+        camParams.setResolution([P.ru(), P.rv()])
+        dist_coeffs = P.distortion().getParameters().flatten(1)
+        camParams.setDistortion(distortionModel, dist_coeffs)
+
+        chain.addCameraAtEnd(camParams)
+
+    chain.writeYaml()
+
+
+def fakeImuYaml(imu_yaml):
+    with open(imu_yaml, 'w') as stream:
+        stream.write("  T_i_b:\n  - [1.0, 0.0, 0.0, 0.0]\n  - [0.0, 1.0, 0.0, 0.0]\n  - [0.0, 0.0, 1.0, 0.0]\n  - [0.0, 0.0, 0.0, 1.0]\n")
+        stream.write("  accelerometer_noise_density: 0.01\n  accelerometer_random_walk: 0.0002\n  gyroscope_noise_density: 0.005\n")
+        stream.write("  gyroscope_random_walk: 4.0e-06\n  model: calibrated\n  rostopic: /imu0\n  time_offset: 0.0\n")
+        stream.write("  update_rate: 200.0\n  gravity_in_target: [0.0, 8.8, -4.4]\n  initial_gyro_bias: [0.0, 0.0, 0.0]\n")
+        stream.write("  initial_accelerometer_bias: [0.0, 0.0, 0.0]\n")
+
+
+def fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated"):
+    """
+    compute camera poses using detected corners in the aprilgrid and the initialized camera intrinsics.
+    Then a pose bspline will be initialized from the camera poses. Also a gyro bias bspline and an accelerometer bias
+    bspline will be initialized.
+    At last these bsplines will be saved along with the predicted IMU readings from the pose bspline.
+    The saved pose B spline and IMU readings are in the IMU clock and IMU frame.
+    :param parsed:
+    :param chain_yaml: contains camera intrinsics
+    :param imu_yaml:
+    :param imu_model:
+    :return:
+    """
+    if parsed.verbose:
+        sm.setLoggingLevel(sm.LoggingLevel.Debug)
+    else:
+        sm.setLoggingLevel(sm.LoggingLevel.Info)
+
+    imus = list()
+    print("Initializing IMU")
+    imuConfig = kc.ImuParameters(imu_yaml)
+    imuConfig.printDetails()
+    if imu_model == 'calibrated':
+        imus.append(sens.IccImu(imuConfig, parsed, isReferenceImu=(not imus),
+                                estimateTimedelay=False))
+    else:
+        sm.logError("Model {0} is currently unsupported.".format(imu_model))
+        sys.exit(2)
+
+    if parsed.target_yaml:
+        # load calibration target configuration
+        targetConfig = kc.CalibrationTargetParameters(parsed.target_yaml)
+
+        print("Initializing calibration target:")
+        targetConfig.printDetails()
+    else:
+        targetConfig = None
+
+    print("Initializing camera chain:")
+    chain = kc.CameraChainParameters(chain_yaml)
+    chain.printDetails()
+    parsed.reprojection_sigma = 1.0
+    parsed.extractionstepping = False
+
+    camChain = sens.IccCameraChain(chain, targetConfig, parsed)
+    config = IccCalibratorConfiguration()
+    config.estimateParameters['timeOffset'] = True
+    config.estimateParameters['chainExtrinsics'] = False
+    config.estimateParameters['shutter'] = False
+    config.estimateParameters['intrinsics'] = False
+    config.estimateParameters['distortion'] = False
+
+    # create a calibrator instance
+    iCal = IccCalibrator(config)
+
+    # register sensors with calibrator
+    iCal.registerCamChain(camChain)
+    for imu in imus:
+        iCal.registerImu(imu)
+        if imu is not imus[0]:
+            imu.findOrientationPrior(imus[0])
+
+    print("Building the problem")
+    iCal.buildProblem(splineOrder=6,
+                      poseKnotsPerSecond=100,
+                      biasKnotsPerSecond=50,
+                      doPoseMotionError=False,
+                      doBiasMotionError=True,
+                      blakeZisserCam=-1,
+                      huberAccel=-1,
+                      huberGyro=-1,
+                      verbose=parsed.verbose)
+
+    imu_file = "imu_check.txt"
+    predictedImuArray = BSplineIO.saveImuMeasurementsFromPoseBSpline(iCal, imu_file)
+    baseCamera = iCal.CameraChain.camList[0]
+    return baseCamera, predictedImuArray, iCal.ImuList[0].imuData
+
+
+def atArrayMinimum(array, dataColumn, checkRow, halfWindow, tol):
+    startIndex = max(0, checkRow - halfWindow)
+    finishIndex = min(checkRow + halfWindow, array.shape[0])
+    if abs(np.amin(array[startIndex : finishIndex, dataColumn]) -
+           array[checkRow, dataColumn]) < tol:
+        return True
+    else:
+        return False
+
+
+def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windowDuration, omega_tol):
+    """
+
+    :param baseCamera: The single camera.
+    :param predictedImuDataArray: numpy array [time in secs, omega, alpha]
+    :param imuData: list of Imu Measurements
+    :param parsed:
+    :param windowDuration: duration of the window for computing running averages.
+    :param omega_tol: In the running average array of norms of omega, if the average norm at the image timestamp is
+        smaller than parsed.max_omega and is within tol of the minimum in the sliding window, then the frame will be
+        chosen as a static frame. The larger tol is, the more frames will be selected.
+    :return:
+    """
+    outputBag = parsed.output_bag
+    imageDatasetReader = baseCamera.dataset
+
+    rate = 1.0 / np.mean(np.diff(predictedImuDataArray[:, 0]))
+    halfWindow = int(windowDuration * rate / 2)
+    print('IMU average rate {}, running window of samples {}'.format(rate, halfWindow * 2))
+
+    averagePredictedImu = np.zeros((predictedImuDataArray.shape[0], 3))
+    for index, row in enumerate(predictedImuDataArray):
+        averagePredictedImu[index, 0] = row[0]
+        startIndex = max(index - halfWindow, 0)
+        finishIndex = min(index + halfWindow, predictedImuDataArray.shape[0])
+        averagePredictedImu[index, 1] = np.mean(np.linalg.norm(predictedImuDataArray[startIndex : finishIndex, 1:4], axis=1))
+        averagePredictedImu[index, 2] = np.mean(np.linalg.norm(predictedImuDataArray[startIndex : finishIndex, 4:7], axis=1))
+
+    averageImu = np.zeros((len(imuData), 3))
+    imuDataArray = np.zeros((len(imuData), 7))
+    for index, data in enumerate(imuData):
+        imuDataArray[index, 0] = data.stamp.toSec()
+        imuDataArray[index, 1:4] = data.omega
+        imuDataArray[index, 4:7] = data.alpha
+
+    for index, row in enumerate(imuDataArray):
+        averageImu[index, 0] = row[0]
+        startIndex = max(index - halfWindow, 0)
+        finishIndex = min(index + halfWindow, imuDataArray.shape[0])
+        averageImu[index, 1] = np.mean(np.linalg.norm(imuDataArray[startIndex : finishIndex, 1:4], axis=1))
+        averageImu[index, 2] = np.mean(np.linalg.norm(imuDataArray[startIndex : finishIndex, 4:7], axis=1))
+
+    bag = rosbag.Bag(outputBag, 'w')
+    predictedImuIndex = 0
+    imuIndex = 0
+    gravity = 9.80665
+    imageCount = 0
+
+    for idx in imageDatasetReader.indices:
+        topic, data, stamp = imageDatasetReader.bag._read_message(imageDatasetReader.index[idx].position)
+        if imageDatasetReader.perform_synchronization:
+            synced_time = imageDatasetReader.timestamp_corrector.getLocalTime(data.header.stamp.to_sec())
+        else:
+            synced_time = data.header.stamp.secs + data.header.stamp.nsecs * 1e-9
+        synced_time += baseCamera.timeshiftCamToImuPrior
+
+        while predictedImuIndex < averagePredictedImu.shape[0] and averagePredictedImu[predictedImuIndex][0] < synced_time:
+            predictedImuIndex += 1
+        if predictedImuIndex == averagePredictedImu.shape[0]:
+            print("Break after reaching the end of IMU data computed from camera images!")
+            break
+
+        atPredictedImuMinimum = False
+        if averagePredictedImu[predictedImuIndex, 1] < parsed.max_omega:
+            atPredictedImuMinimum = atArrayMinimum(averagePredictedImu, 1, predictedImuIndex - 1, halfWindow, omega_tol) or \
+                                    atArrayMinimum(averagePredictedImu, 1, predictedImuIndex, halfWindow, omega_tol)
+
+        while averageImu[imuIndex][0] < synced_time:
+            imuIndex += 1
+        atImuMinimum = False
+        if averageImu[imuIndex, 1] < parsed.max_omega and abs(averageImu[imuIndex, 2] - gravity) < parsed.max_accel:
+            atImuMinimum = atArrayMinimum(averageImu, 1, imuIndex - 1, halfWindow, omega_tol) or \
+                           atArrayMinimum(averageImu, 1, imuIndex, halfWindow, omega_tol)
+        if atPredictedImuMinimum and atImuMinimum:
+            bag.write(topic, data, stamp)
+            imageCount += 1
+            print("Saved frame at {}.".format(synced_time))
+    print('Saved {} static frames out of {} frames!'.format(imageCount, len(imageDatasetReader.indices)))
+    bag.close()
+
+
+def main():
+    parsed = parseArgs()
+
+    signal.signal(signal.SIGINT, signal_exit)
+
+    cameraList = initializeCameraIntrinsics(parsed.bagfile, parsed.topics, parsed.models,
+                                            parsed.target_yaml, [5, 25], parsed.showextraction, parsed.verbose)
+
+    bagtag = parsed.bagfile.translate(None, "<>:/\|?*").replace('.bag', '', 1)
+    chain_yaml = "camchain-" + bagtag + ".yaml"
+    saveCameraIntrinsics(cameraList, parsed.topics, chain_yaml)
+
+    imu_yaml = "imu.yaml"
+    fakeImuYaml(imu_yaml)
+    parsed.bagfile = [parsed.bagfile]
+    parsed.perform_synchronization = True
+    baseCamera, predictedImuData, imuData = fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated")
+
+    windowDuration = 0.36
+    omega_tol = 0.01
+
+    selectStaticFrames(baseCamera, predictedImuData, imuData, parsed, windowDuration, omega_tol)
+
+
+if __name__ == '__main__':
+    main()

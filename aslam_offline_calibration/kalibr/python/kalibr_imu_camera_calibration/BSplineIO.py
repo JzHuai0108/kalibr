@@ -131,19 +131,24 @@ def saveCameraStates(times, poseSplineDv, stream = sys.stdout):
         msg = ', '.join(map(str, row))
         stream.write("{:d}, {}, {}\n".format(frameIds[index], toNanosecondString(measuredTimes[index]), msg))
 
-def saveBSplineRefImuMeas(cself, filename):
+def saveImuMeasurementsFromPoseBSpline(cself, filename):
+    """
+    generate IMU data from pose bspline, gyro bspline, and accelerometer bspline.
+    :param cself:
+    :param filename:
+    :return: time, predicted angular rate, predicted accelerometer data, gyro bias, accelerometer bias
+    """
     print >> sys.stdout, "  Saving IMU measurements generated from B-spline to", filename
 
     idx = 0
-    imu = cself.ImuList[idx]    
+    imu = cself.ImuList[idx]
     poseSplineDv = cself.poseDv
     print("  imuData begin at {:.6f} end at {:.6f} imu time offset {}".format(imu.imuData[0].stamp.toSec(), imu.imuData[-1].stamp.toSec(), imu.timeOffset))
     times = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData \
-                      if im.stamp.toSec() + imu.timeOffset > poseSplineDv.spline().t_min() \
-                      and im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max() ])
+                      if poseSplineDv.spline().t_min() < im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max()])
 
     predictedAng_body =  np.array([err.getPredictedMeasurement() for err in imu.gyroErrors])    
-    predicetedAccel_body =  np.array([err.getPredictedMeasurement() for err in imu.accelErrors])
+    predictedAccel_body =  np.array([err.getPredictedMeasurement() for err in imu.accelErrors])
 
     gyroBias = imu.gyroBiasDv.spline()    
     gyro_bias_spline = np.array([gyroBias.evalD(t,0) for t in times])
@@ -154,12 +159,13 @@ def saveBSplineRefImuMeas(cself, filename):
     print >> sys.stdout, '\tEpitome of predicted inertial measurements'
     print >> sys.stdout, "\t#times", times.shape
     print >> sys.stdout, "\t#gyro", predictedAng_body.shape
-    print >> sys.stdout, "\t#accel", predicetedAccel_body.shape
+    print >> sys.stdout, "\t#accel", predictedAccel_body.shape
     print >> sys.stdout, "\t#gyro bias", gyro_bias_spline.shape
     print >> sys.stdout, "\t#accel bias", acc_bias_spline.shape
 
-    whole=np.concatenate((np.array([times]).T, predictedAccel_body, predicetedAng_body, acc_bias_spline, gyro_bias_spline),axis=1)
-    np.savetxt(filename,whole, fmt=['%.9f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f'])
+    predictedImu=np.concatenate((np.array([times]).T, predictedAng_body, predictedAccel_body, gyro_bias_spline, acc_bias_spline),axis=1)
+    np.savetxt(filename,predictedImu, fmt=['%.9f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f'])
+    return predictedImu
 
 
 def saveBSpline(cself, outputDir):
@@ -193,7 +199,7 @@ def saveBSpline(cself, outputDir):
         refStateStream.close()
 
         refImuFile = "imu_check.txt"
-        saveBSplineRefImuMeas(cself, refImuFile)
+        saveImuMeasurementsFromPoseBSpline(cself, refImuFile)
 
         landmarks = cself.CameraChain.camList[0].detector.target().points()
         landmarkCsv = "landmarks_check.csv"
