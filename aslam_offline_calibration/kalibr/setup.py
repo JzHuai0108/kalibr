@@ -12,6 +12,7 @@ setup_args = generate_distutils_setup(
     package_dir={'':'python'},
     scripts=['python/kalibr_bagcreater',
              'python/kalibr_bagextractor',
+             'python/extract_static_frames',
              'python/kalibr_calibrate_cameras',
              'python/kalibr_calibrate_rs_cameras',
              'python/kalibr_calibrate_imu_camera',

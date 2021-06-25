@@ -266,7 +266,7 @@ def atArrayMinimum(array, dataColumn, checkRow, halfWindow, tol):
         return False
 
 
-def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windowDuration, omega_tol):
+def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windowDuration, omegaTol):
     """
 
     :param baseCamera: The single camera.
@@ -274,15 +274,18 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windo
     :param imuData: list of Imu Measurements
     :param parsed:
     :param windowDuration: duration of the window for computing running averages.
-    :param omega_tol: In the running average array of norms of omega, if the average norm at the image timestamp is
+    :param omegaTol: In the running average array of norms of omega, if the average norm at the image timestamp is
         smaller than parsed.max_omega and is within tol of the minimum in the sliding window, then the frame will be
         chosen as a static frame. The larger tol is, the more frames will be selected.
     :return:
     """
     outputBag = parsed.output_bag
     imageDatasetReader = baseCamera.dataset
+    imageTimes = [obs.time().toSec() for obs in baseCamera.targetObservations]
+    imageInterval = np.median(np.diff(imageTimes))
 
-    rate = 1.0 / np.mean(np.diff(predictedImuDataArray[:, 0]))
+    imuInterval = np.mean(np.diff(predictedImuDataArray[:, 0]))
+    rate = 1.0 / imuInterval
     halfWindow = int(windowDuration * rate / 2)
     print('IMU average rate {}, running window of samples {}'.format(rate, halfWindow * 2))
 
@@ -313,16 +316,17 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windo
     imuIndex = 0
     gravity = 9.80665
     imageCount = 0
+    lastFrameSyncedTime = 0
 
     for idx in imageDatasetReader.indices:
         topic, data, stamp = imageDatasetReader.bag._read_message(imageDatasetReader.index[idx].position)
         if imageDatasetReader.perform_synchronization:
-            synced_time = imageDatasetReader.timestamp_corrector.getLocalTime(data.header.stamp.to_sec())
+            syncedTime = imageDatasetReader.timestamp_corrector.getLocalTime(data.header.stamp.to_sec())
         else:
-            synced_time = data.header.stamp.secs + data.header.stamp.nsecs * 1e-9
-        synced_time += baseCamera.timeshiftCamToImuPrior
+            syncedTime = data.header.stamp.secs + data.header.stamp.nsecs * 1e-9
+        syncedTime += baseCamera.timeshiftCamToImuPrior
 
-        while predictedImuIndex < averagePredictedImu.shape[0] and averagePredictedImu[predictedImuIndex][0] < synced_time:
+        while predictedImuIndex < averagePredictedImu.shape[0] and averagePredictedImu[predictedImuIndex][0] < syncedTime:
             predictedImuIndex += 1
         if predictedImuIndex == averagePredictedImu.shape[0]:
             print("Break after reaching the end of IMU data computed from camera images!")
@@ -330,19 +334,26 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windo
 
         atPredictedImuMinimum = False
         if averagePredictedImu[predictedImuIndex, 1] < parsed.max_omega:
-            atPredictedImuMinimum = atArrayMinimum(averagePredictedImu, 1, predictedImuIndex - 1, halfWindow, omega_tol) or \
-                                    atArrayMinimum(averagePredictedImu, 1, predictedImuIndex, halfWindow, omega_tol)
+            atPredictedImuMinimum = atArrayMinimum(averagePredictedImu, 1, predictedImuIndex - 1, halfWindow, omegaTol) or \
+                                    atArrayMinimum(averagePredictedImu, 1, predictedImuIndex, halfWindow, omegaTol)
 
-        while averageImu[imuIndex][0] < synced_time:
+        while averageImu[imuIndex][0] < syncedTime:
             imuIndex += 1
         atImuMinimum = False
         if averageImu[imuIndex, 1] < parsed.max_omega and abs(averageImu[imuIndex, 2] - gravity) < parsed.max_accel:
-            atImuMinimum = atArrayMinimum(averageImu, 1, imuIndex - 1, halfWindow, omega_tol) or \
-                           atArrayMinimum(averageImu, 1, imuIndex, halfWindow, omega_tol)
-        if atPredictedImuMinimum and atImuMinimum:
-            bag.write(topic, data, stamp)
-            imageCount += 1
-            print("Saved frame at {}.".format(synced_time))
+            atImuMinimum = atArrayMinimum(averageImu, 1, imuIndex - 1, halfWindow, omegaTol) or \
+                           atArrayMinimum(averageImu, 1, imuIndex, halfWindow, omegaTol)
+        if atImuMinimum:
+            saveFrame = True
+            if lastFrameSyncedTime != 0:
+                if syncedTime - lastFrameSyncedTime < 2 * imageInterval:
+                    saveFrame = False
+            if saveFrame:
+                bag.write(topic, data, stamp)
+                lastFrameSyncedTime = syncedTime
+                imageCount += 1
+                print("Saved frame at {}.".format(syncedTime))
+
     print('Saved {} static frames out of {} frames!'.format(imageCount, len(imageDatasetReader.indices)))
     bag.close()
 
@@ -353,7 +364,7 @@ def main():
     signal.signal(signal.SIGINT, signal_exit)
 
     cameraList = initializeCameraIntrinsics(parsed.bagfile, parsed.topics, parsed.models,
-                                            parsed.target_yaml, [5, 25], parsed.showextraction, parsed.verbose)
+                                            parsed.target_yaml, [25, 45], parsed.showextraction, parsed.verbose)
 
     bagtag = parsed.bagfile.translate(None, "<>:/\|?*").replace('.bag', '', 1)
     chain_yaml = "camchain-" + bagtag + ".yaml"
@@ -366,9 +377,9 @@ def main():
     baseCamera, predictedImuData, imuData = fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated")
 
     windowDuration = 0.36
-    omega_tol = 0.01
+    omegaTol = 0.01
 
-    selectStaticFrames(baseCamera, predictedImuData, imuData, parsed, windowDuration, omega_tol)
+    selectStaticFrames(baseCamera, predictedImuData, imuData, parsed, windowDuration, omegaTol)
 
 
 if __name__ == '__main__':
