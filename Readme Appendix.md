@@ -1,48 +1,77 @@
-# Install Kalibr from source on Ubuntu 16.04 with ROS Kinetic
+# Appendix
+This page details how to use features in this extended Kalibr version, in the order of practical value.
+* a. calibrating the spatiotemporal parameters of a rolling shutter (RS) camera - IMU system, 
+* b. simulating data of a rolling shutter camera - IMU system,
+* c. calibrating a rolling shutter camera with optional IMU data,
 
-## Install dependencies as instructed on the Wiki of Kalibr on github
+
+## Install Kalibr
+Follow instructions on [Kalibr installation](https://github.com/ethz-asl/kalibr/wiki/installation).
+
+## Calibrate a (multiple) RS camera - IMU system
+This runs very similarly to the default global shutter (GS) [camera - IMU calibration](https://github.com/ethz-asl/kalibr/wiki/camera-imu-calibration).
+To calibrate a RS camera - IMU system, only two additional parameters are needed.
+* add parameter *line_delay_nanoseconds* in the camera configuration yaml with an nonzero value, 
+see [a template](./aslam_offline_calibration/kalibr/config_templates/camchain_template.yaml) for example.
+* pass *--estimate-line-delay* to the *kalibr_calibrate_imu_camera* command.
+
+You may try RS camera - IMU calibration with the 
+[sample camera - IMU calibration dataset](https://github.com/ethz-asl/kalibr/wiki/downloads).
+The final calibration result will include the refined line_delay_nanoseconds with a value very close to 0.
+
+Unsurprisingly, aside from the RS effect, it is also possible to calibrate the IMU intrinsic parameters as in the original 
+[GS camera - IMU calibration](https://github.com/ethz-asl/kalibr/wiki/Multi-IMU-and-IMU-intrinsic-calibration).
+
+## Simulate RS camera - IMU data from real camera - IMU data
+
+### Record an camera - IMU calibration dataset
+
+The [sample camera - IMU dataset](https://github.com/ethz-asl/kalibr/wiki/downloads) also works.
+
+### Run camera - IMU calibration and save the resulting B-spline models
+
+To enable saving the B-spline model, pass the argument *--save-splines* to the *kalibr_calibrate_imu_camera* routine.
+This will save the B spline models for the pose trajectory, gyro biases, and accelerometer biases, among others.
+
+### Prepare camera and IMU configuration yamls for simulation
+
+Refer to the [camera and IMU configuration yaml templates](./aslam_offline_calibration/kalibr/config_templates/) for examples.
+
+### Based on the B-spline motion models, simulate RS camera and IMU data
+
+Suppose output_dir is where the B-spline models are saved, simulate the RS camera - IMU with the below command.
 ```
-sudo apt-get install python-setuptools python-rosinstall ipython libeigen3-dev libboost-all-dev doxygen libopencv-dev ros-kinetic-vision-opencv ros-kinetic-image-transport-plugins ros-kinetic-cmake-modules python-software-properties software-properties-common libpoco-dev python-matplotlib python-scipy python-git python-pip ipython libtbb-dev libblas-dev liblapack-dev python-catkin-tools libv4l-dev 
-```
-## Install the additional python packages
-```
-sudo apt-get install python-wxversion python-wxtools
-```
-## Install python-igraph via
-```
-sudo pip install python-igraph --upgrade
-```
-In installing python-igraph, there may arise an error reads as in the below reference
-reference: https://stackoverflow.com/questions/37495375/python-pip-install-throws-typeerror-unsupported-operand-types-for-retry
-Even using the solution suggested in the reference page, the error in installing python-igraph persists.
-
-Don't fuss about it. Simply ignore it and go ahead to build kalibr with catkin_make. The building procedure succeeds in my case.
-
-# Simulate monocular inertial data
-
-1. Record an imu camera calibration dataset and generate a B-spline model
-
-The dataset can be the imu camera calibration sample data provided by Kalibr
-
-```
-kalibr_calibrate_imu_camera --cam camchain.yaml --target april_6x6.yaml --imu imu_adis16448.yaml --bag dynamic.bag \
-  --bag-from-to 5 45 --dont-show-report
-
-```
-The output results will include the B-spline model, knotCoeffT, and ref_pose, ref_state, ref_imu_meas generated from the model. More details refer to saveBSpline in python/kalibr_imu_camera_calibration/IccUtil.py.
-
-2. Based on the B-spline model, simulate rolling shutter camera measurements.
-Templates for the camera-IMU system, and the IMU is at the config_templates folder.
-```
-kalibr_simulate_imu_camera $output_dir/bspline_pose.txt --cam $script_dir/camchain_template.yaml --imu $script_dir/imu_template.yaml \
-  --target $data_dir/april_6x6.yaml --output_dir $output_dir
+kalibr_simulate_imu_camera $output_dir/bspline_pose.txt --cam camchain_imucam.yaml --imu imu.yaml \
+  --target april_6x6.yaml --output_dir $output_dir
 ```
 
-# A crash course on design variables of calibration by using B splines.
+Note that currently the simulation only supports simulating for one camera.
 
-## kalibr\_calibrate\_imu_camera
+The output files is in the [maplab csv dataset format](https://github.com/ethz-asl/maplab/wiki/CSV-Dataset-Format).
 
-Design variables
+## Calibrate a RS camera with optional IMU data (very experimental)
+The original RS camera calibration routine calibrates the RS effect and optional camera intrinsic parameters with only camera data.
+Intuitively, its accuracy and stability can be boosted with the IMU data.
+While inheriting the original functionality of kalibr_calibrate_rs_cameras,
+the present implementation can take additional IMU data for constraints.
+For simplicity, the calibrated IMU model is used where the IMU data are modeled with true values, biases, and noises, 
+but not scale and misalignment.
+
+To allow use of additional IMU data, 
+* make sure the rosbag dataset has the IMU data,
+* pass the IMU configuration yaml via *--imu* argument to *kalibr_calibrate_rs_cameras*.
+
+## About covariance recovery
+Theoretically, it is possible to recover the covariances for estimated parameters by using marginalization techniques.
+However, the computation often takes too long so the covariance recovery functions in kalibr_calibrate_imu_camera and
+kalibr_calibrate_rs_cameras are literally useless. 
+The cause may be the strong coupling between adjacent control points in B-splines.
+
+## A crash course on design variables in calibration with B-splines.
+
+### kalibr\_calibrate\_imu_camera
+
+* Design variables
 
 ```
 poseDv: asp.BSplinePoseDesignVariable
@@ -59,22 +88,23 @@ camera Dvs:
     cameraTimetoImuTimeDv: aopt.Scalar
 ```
 
-Access content 
+* Access values
 ```
 gravityDv: toEuclidean()
 accelBiasDv/gyroBiasDv: spline().eval(t) or evalD(t, 0)
-q_i_b_Dv: toRotationMatrix() 
+q_i_b_Dv: toRotationMatrix()
 r_b_Dv: toEuclidean()
 poseSplineDv: sm.Transformation(T_w_b.toTransformationMatrix()) where T_w_b=transformationAtTime(timeExpression, 0.0, 0.0)
 ```
 
-Error terms
+* Error terms
 ```
 CameraChainErrorTerms: error_t(frame, pidx, p) where error_t = self.camera.reprojectionErrorType + setMEstimatorPolicy
 
 The realizations of reprojectionErrorType derive from the SimpleReprojectionError C++ class which is exported to python in exportReprojectionError().
-The different error types are grouped into a variety of camera models in terms of python classes defined in aslam_cv/aslam_cv_backend_python/python/aslam_cv_backend/__init__.py.
-These errors are independent of camera parameters, thus simple.
+The different error types are grouped into a variety of camera models in terms of python classes defined in 
+aslam_cv/aslam_cv_backend_python/python/aslam_cv_backend/__init__.py.
+These errors are independent of camera parameters.
 
 AccelerometerErrorTerms: ket.EuclideanError + setMEstimatorPolicy
 GyroscopeErrorTerms: ket.EuclideanError + setMEstimatorPolicy
@@ -82,32 +112,32 @@ Accel and gyro BiasMotionTerms: BSplineEuclideanMotionError
 PoseMotionTerms: MarginalizationPriorErrorTerm (by default inactive)
 ```
 
-## kalibr_calibrate_rs_cameras
+### kalibr_calibrate_rs_cameras
 This calibration procedure supports only one camera.
 
-Design variables
+* Design variables
 ```
 landmark_w_dv: aopt.HomogeneousPointDv (by default inactive)
 __poseSpline_dv: asp.BSplinePoseDesignVariable
-__camera_dv: The camera design variables are created by cameraModel.designVariable(self.geometry). The camera design variables are exported to python by exportCameraDesignVariables.
+__camera_dv: The camera design variables are created by cameraModel.designVariable(self.geometry). 
+The camera design variables are exported to python by exportCameraDesignVariables.
     projection: DesignVariableAdapter<projection_t>
     distortion: DesignVariableAdapter<distortion_t>
     shutter: DesignVariableAdapter<shutter_t>
 ```
 
-Error terms
+* Error terms
 ```
-For rolling shutter models, reprojectionErrorAdaptiveCovariance. These error types derive from the CovarianceReprojectionError C++ class, which is exported to python by exportCovarianceReprojectionError. 
+For rolling shutter models, reprojectionErrorAdaptiveCovariance. These error types derive from the CovarianceReprojectionError C++ class, which is exported to python by exportCovarianceReprojectionError.
 The different error types are grouped into a variety of camera models in terms of python classes defined in aslam_cv/aslam_cv_backend_python/python/aslam_cv_backend/__init__.py.
 Reprojection errors with adaptive covariance is developed solely for rolling shutter cameras as discussed in
-3.5. Error Term Standardisation of Oth et. al. CVPR Rolling shutter camera calibration.
+Section 3.5 Error Term Standardisation, Oth et. al., Rolling shutter camera calibration.
 Because of the error standardisation, these reprojection errors depend on not only the camera parameters, 
 but also the pose B splines.
 
-For global shutter models, reprojectionError. These error types derive from the ReprojectionError C++ class which is exported to python by exportReprojectionError. These errors depend on the camera parameters which may be optimized in the kalibr_calibrate_rs_cameras procedure.
+For global shutter models, reprojectionError. These error types derive from the ReprojectionError C++ class which
+is exported to python by exportReprojectionError. 
+These errors depend on the camera parameters which may be optimized in the kalibr_calibrate_rs_cameras procedure.
 
 regularizer: asp.BSplineMotionError of aslam_nonparametric_estimation/aslam_splines/include/aslam/backend.
-to disambiguate, there is another BSplineMotionError in aslam_cv/aslam_cv_error_terms/include/aslam/backend.
-The two implementations are more or less the same, the one in aslam_splines looks newer.
 ```
-
