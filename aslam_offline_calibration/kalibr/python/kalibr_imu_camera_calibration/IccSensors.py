@@ -196,15 +196,15 @@ class IccCamera():
             sys.exit(-1)
 
         #overwrite the external rotation prior (keep the external translation prior)
-        R_i_c = q_i_c_Dv.toRotationMatrix().transpose()
-        self.T_extrinsic = sm.Transformation( sm.rt2Transform( R_i_c, self.T_extrinsic.t() ) )
+        R_c_i = q_i_c_Dv.toRotationMatrix().transpose()
+        self.T_extrinsic = sm.Transformation( sm.rt2Transform( R_c_i, self.T_extrinsic.t() ) )
 
         #estimate gravity in the world coordinate frame as the mean specific force
         a_w = []
         for im in imu.imuData:
             tk = im.stamp.toSec()
             if tk > poseSpline.t_min() and tk < poseSpline.t_max():
-                a_w.append(np.dot(poseSpline.orientation(tk), np.dot(R_i_c, - im.alpha)))
+                a_w.append(np.dot(poseSpline.orientation(tk), np.dot(R_c_i, - im.alpha)))
         mean_a_w = np.mean(np.asarray(a_w).T, axis=1)
         self.gravity_w = mean_a_w / np.linalg.norm(mean_a_w) * 9.80655
         print "Gravity was intialized to", self.gravity_w, "[m/s^2]" 
@@ -215,8 +215,8 @@ class IccCamera():
         imu.GyroBiasPrior = (imu.GyroBiasPriorCount-1.0)/imu.GyroBiasPriorCount * imu.GyroBiasPrior + 1.0/imu.GyroBiasPriorCount*b_gyro
 
         #print result
-        print "  Orientation prior camera-imu found as: (T_i_c)"
-        print R_i_c
+        print "  Orientation prior camera-imu found as: (R_c_i)"
+        print R_c_i
         print "  Gyro bias prior found as: (b_gyro)"
         print b_gyro
     
@@ -294,7 +294,7 @@ class IccCamera():
         
     #initialize a pose spline using camera poses (pose spline = T_wb)
     def initPoseSplineFromCamera(self, splineOrder=6, poseKnotsPerSecond=100, timeOffsetPadding=0.02):
-        T_c_b = self.T_extrinsic.T()        
+        T_c_b = self.T_extrinsic.T()
         pose = bsplines.BSplinePose(splineOrder, sm.RotationVector() )
                 
         # Get the checkerboard times.
