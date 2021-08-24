@@ -39,6 +39,7 @@ class IccCalibrator(object):
         self.gravityExpression = None
         self.problem = None
         self.optimizer = None
+        self.optimizationResult = None
 
     def getEstimateParameters(self):
         return self.__config.estimateParameters
@@ -193,6 +194,7 @@ class IccCalibrator(object):
         optimizationFailed=False
         try: 
             retval = self.optimizer.optimize()
+            self.optimizationResult = retval
             if retval.linearSolverFailure:
                 optimizationFailed = True
         except:
@@ -280,4 +282,87 @@ class IccCalibrator(object):
             chain.writeYaml(resultFile)
         except:
             print "ERROR: Could not write parameters to file: {0}\n".format(resultFile)
-            
+    
+    def computeResidualStatistics(self):
+        """
+        return
+        stats: a dict including JFinal, camera noise std, and IMU noise parameters.
+        JFinal is the final cost function value which considers the measurement noise weighting but not the MEstimator weighting.
+        """
+        noiseParameterNames = ["accelerometer_noise_density", "accelerometer_random_walk", 
+            "gyroscope_noise_density", "gyroscope_random_walk"]
+        
+        stats = dict()
+        stats['JFinal'] = self.optimizationResult.JFinal
+
+        for cidx, cam in enumerate(self.CameraChain.camList):
+            if len(cam.allReprojectionErrors)>0:
+                rawErrors = np.array([rerr.error() for reprojectionErrors in cam.allReprojectionErrors 
+                        for rerr in reprojectionErrors])
+                camNoise = np.std(rawErrors, 0, ddof=1)
+                camName = 'cam{}'.format(cidx)
+                stats[camName] = dict()
+                stats[camName]['image_noise_std_dev'] = camNoise
+                print("Reprojection error (cam{0}) [px]: mean {1}, median {2}, std: {3}".format(
+                        cidx, np.mean(rawErrors, 0), np.median(rawErrors, 0), camNoise))                
+            else:
+                print("Reprojection error (cam{0}) [px]:     no corners".format(cidx))
+
+        for iidx, imu in enumerate(self.ImuList):
+            f = imu.imuConfig.getUpdateRate()
+            rootf = np.sqrt(f)
+            rootdt = 1.0 / rootf
+
+            # compute noise stats
+            eGyro = np.array([ e.error() for e in imu.gyroErrors ]) # N x 3
+            gyroNoiseDiscrete = np.std(eGyro, 0, ddof=1)
+            print("Gyroscope error (imu{0}) [rad/s]: mean {1}, median {2}, std: {3}".format(
+                    iidx, np.mean(eGyro, 0), np.median(eGyro, 0), gyroNoiseDiscrete))
+            eAccel = np.array([ e.error() for e in imu.accelErrors ])
+            accelNoiseDiscrete = np.std(eAccel, 0, ddof=1)
+            print("Accelerometer error (imu{0}) [m/s^2]: mean {1}, median {2}, std: {3}".format(
+                    iidx, np.mean(eAccel, 0), np.median(eAccel, 0), accelNoiseDiscrete))
+
+            imuName = 'imu{}'.format(iidx)
+            stats[imuName] = dict()
+            stats[imuName]["accelerometer_noise_density"] = accelNoiseDiscrete * rootdt
+            stats[imuName]["gyroscope_noise_density"] = gyroNoiseDiscrete * rootdt
+
+            # compute bias random walk stats by sampling the bias splines
+            padding = 1.0 # remove padding from both ends to avert ripple effect.
+            clampstart = self.poseDv.spline().t_min() + padding
+            clampend = self.poseDv.spline().t_max() - padding
+            gyroBiasSpline = imu.gyroBiasDv.spline()
+            accBiasSpline = imu.accelBiasDv.spline()
+                
+            samplingFactor = [0.1, 0.3, 1, 3, 10]
+            accWalkList = np.zeros((len(samplingFactor), 4))
+            gyroWalkList = np.zeros((len(samplingFactor), 4))
+            for fid, factor in enumerate(samplingFactor):
+                biasSamplingInterval = factor / f
+                imuTimes = np.arange(clampstart, clampend, biasSamplingInterval)
+
+                gyroBiasList = []
+                accBiasList = []
+                for time in imuTimes:
+                    gyro_bias = gyroBiasSpline.eval(time)
+                    acc_bias = accBiasSpline.eval(time)
+                    gyroBiasList.append(gyro_bias)
+                    accBiasList.append(acc_bias)
+                gyroBiasDiff = np.diff(gyroBiasList, axis=0)
+                accBiasDiff = np.diff(accBiasList, axis=0)
+
+                gyroWalkDiscrete = np.std(gyroBiasList, 0, ddof=1)
+                gyroWalk = gyroWalkDiscrete * rootf
+                accWalkDiscrete = np.std(accBiasList, 0, ddof=1)
+                accWalk = accWalkDiscrete * rootf
+
+                gyroWalkList[fid][0] = biasSamplingInterval
+                gyroWalkList[fid][1:] = gyroWalk
+                accWalkList[fid][0] = biasSamplingInterval
+                accWalkList[fid][1:] = accWalk
+
+            stats[imuName]["accelerometer_random_walk"] = accWalkList
+            stats[imuName]["gyroscope_random_walk"] = gyroWalkList
+        return stats
+

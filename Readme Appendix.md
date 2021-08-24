@@ -67,6 +67,27 @@ However, the computation often takes too long so the covariance recovery functio
 kalibr_calibrate_rs_cameras are literally useless. 
 The cause may be the strong coupling between adjacent control points in B-splines.
 
+## Reference
+More information about RS camera - IMU calibration and simulation can be found
+at the [report](https://arxiv.org/abs/2108.07200).
+If you find the extension useful, please consider citing it.
+```
+@techreport{huaiContinuoustime2021,
+  title = {Continuous-time spatiotemporal calibration of a rolling shutter camera-{{IMU}} system},
+  author = {Huai, Jianzhu and Zhuang, Yuan and Yuan, Qicheng and Lin, Yukai},
+  year = {2021},
+  month = aug,
+  eprint = {2108.07200},
+  eprinttype = {arxiv},
+  pages = {11},
+  address = {{Wuhan, Hubei, China}},
+  institution = {{Wuhan University}},
+  url = {http://arxiv.org/abs/2108.07200},
+  urldate = {2021-08-22},
+  archiveprefix = {arXiv}
+}
+```
+
 ## A crash course on design variables in calibration with B-splines.
 
 ### kalibr\_calibrate\_imu_camera

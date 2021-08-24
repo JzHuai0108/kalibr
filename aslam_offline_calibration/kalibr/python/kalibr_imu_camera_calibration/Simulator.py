@@ -408,7 +408,7 @@ class RsCameraSimulator(object):
             stream.write('{}\n'.format(header))
             for vertexId, frameKeypoints in enumerate(frameKeypointList):
                 for keypoint in frameKeypoints:
-                    timeString = BSplineIO.toNanosecondString(trueFrameTimes[vertexId] - cameraTimeOffset)
+                    timeString = BSplineIO.secondToNanosecondString(trueFrameTimes[vertexId] - cameraTimeOffset)
                     stream.write('{}, {}, {}, {:d}, {:.5f}, {:.5f}, {}, {}, {}\n'.format(
                         timeString, vertexId, cameraIndex, keypoint[1], keypoint[2], keypoint[3], imageNoise,
                         keypoint[4], -1))
@@ -585,7 +585,7 @@ class RsCameraImuSimulator(RsCameraSimulator):
             for index, time in enumerate(imuTimes):
                 dataString = ', '.join(map(str, imuData[index, :]))
                 biasString = ', '.join(map(str, imuBiases[index, :]))
-                stream.write("{}, {}, {}\n".format(BSplineIO.toNanosecondString(time), dataString, biasString))
+                stream.write("{}, {}, {}\n".format(BSplineIO.secondToNanosecondString(time), dataString, biasString))
 
     def simulateStates(self, outputDir):
         cameraRate = self.computeCameraRate()

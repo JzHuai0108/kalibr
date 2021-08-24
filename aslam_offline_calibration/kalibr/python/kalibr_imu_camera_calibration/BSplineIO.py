@@ -1,4 +1,5 @@
 import math
+import os
 import sys
 
 import numpy as np
@@ -6,6 +7,7 @@ import numpy as np
 import aslam_backend as aopt
 import aslam_splines as asp
 import bsplines
+from kalibr_common import ConfigReader as cr
 import sm
 
 
@@ -106,9 +108,11 @@ def sampleBSplines(stateTimes, poseSplineDv, gyroBiasSpline, accBiasSpline, time
     return frameIds, measuredTimes, states
 
 
-def toNanosecondString(time):
+def secondToNanosecondString(time):
     return "{}{:09d}".format(int(time), int((time-int(time)) * 1e9))
 
+def acvTimeToNanosecondString(acvTime):
+    return "{}{:09d}".format(acvTime.sec, acvTime.nsec)
 
 def saveStates(times, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset = 0, stream = sys.stdout):
     '''save the system states at times.'''
@@ -120,7 +124,7 @@ def saveStates(times, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset = 
             times, poseSplineDv, gyroBiasSpline, accBiasSpline, timeOffset)
     for index, row in enumerate(states):
         msg = ', '.join(map(str, row))
-        stream.write("{:d}, {}, {}\n".format(frameIds[index], toNanosecondString(measuredTimes[index]), msg))
+        stream.write("{:d}, {}, {}\n".format(frameIds[index], secondToNanosecondString(measuredTimes[index]), msg))
 
 def saveCameraStates(times, poseSplineDv, stream = sys.stdout):
     '''save the system states at times.'''
@@ -129,7 +133,7 @@ def saveCameraStates(times, poseSplineDv, stream = sys.stdout):
     frameIds, measuredTimes, states = sampleBSplinePoses(times, poseSplineDv)
     for index, row in enumerate(states):
         msg = ', '.join(map(str, row))
-        stream.write("{:d}, {}, {}\n".format(frameIds[index], toNanosecondString(measuredTimes[index]), msg))
+        stream.write("{:d}, {}, {}\n".format(frameIds[index], secondToNanosecondString(measuredTimes[index]), msg))
 
 def saveImuMeasurementsFromPoseBSpline(cself, filename):
     """
@@ -201,15 +205,6 @@ def saveBSpline(cself, outputDir):
         refImuFile = "imu_check.txt"
         saveImuMeasurementsFromPoseBSpline(cself, refImuFile)
 
-        landmarks = cself.CameraChain.camList[0].detector.target().points()
-        landmarkCsv = "landmarks_check.csv"
-        with open(landmarkCsv, 'w') as stream:
-            header = ', '.join(["landmark index", "landmark position x [m]",
-                                "landmark position y [m]", "landmark position z [m]"])
-            stream.write('{}\n'.format(header))
-            for index, row in enumerate(landmarks):
-                stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
-
         # check landmarks observed in an image.
         cameraIndex = 0
         frameIndex = 0
@@ -248,6 +243,67 @@ def saveBSpline(cself, outputDir):
     print('\tposeSpline\t{:.9f}\t{:.9f}'.format(poseSpline.t_min(), poseSpline.t_max()))
     print('\tgyroBias\t{:.9f}\t{:.9f}'.format(gyroBias.t_min(), gyroBias.t_max()))
     print('\taccBias\t\t{:.9f}\t{:.9f}'.format(accBias.t_min(), accBias.t_max()))
+
+
+def saveVimap(cself, outputDir):
+    """save extracted image keypoints and IMU data in maplab csv format"""
+    vertexCsv = os.path.join(outputDir, "vertices.csv")
+    # create a vertex for every image of camera 0.
+    numFrames = len(cself.CameraChain.camList[0].targetObservations)
+    states = np.zeros((numFrames,16))
+    timeList = []
+    frameIdList = []
+    T_c_b = cself.CameraChain.camList[0].T_extrinsic.T()
+    timeShiftPrior = cself.CameraChain.camList[0].timeshiftCamToImuPrior
+    for frameId, obs in enumerate(cself.CameraChain.camList[0].targetObservations):
+        T_t_b = np.dot(obs.T_t_c().T(), T_c_b)
+        sm_T_w_b = sm.Transformation(T_t_b)
+        states[frameId, 0:3] = sm_T_w_b.t()
+        # quatInv converts JPL quaternion to Halmilton quaternion (x,y,z,w).
+        states[frameId, 3:7] = sm.quatInv(sm_T_w_b.q())
+        # velocity, gyro bias, and accelerometer bias are initialized to zeros.
+
+        timeList.append(obs.time())
+        frameIdList.append(frameId)
+
+    with open(vertexCsv, 'w') as stream:
+        for index, row in enumerate(states):
+            msg = ', '.join(map(str, row))
+            stream.write("{:d}, {}, {}\n".format(frameIdList[index], acvTimeToNanosecondString(timeList[index]), msg))
+    yamlFile = os.path.join(outputDir, "initial_camchain_imu.yaml")
+    initialParameters = cr.ParametersBase(yamlFile, "CameraChainParameters", True)
+    for camNr, camera in enumerate(cself.CameraChain.camList):
+        T_c_b = cself.CameraChain.getResultTrafoImuToCam(camNr)
+        T_b_c = T_c_b.inverse()
+        timeShiftPrior = camera.timeshiftCamToImuPrior
+        camName = "cam{}".format(camNr)
+        initialParameters.data[camName] = dict()
+        initialParameters.data[camName]["T_imu_cam"] = T_b_c
+        initialParameters.data[camName]["timeshift_cam_imu"] = timeShiftPrior
+    initialParameters.writeYaml()
+
+    trackCsv = os.path.join(outputDir, "tracks.csv")
+    observationCsv = os.path.join(outputDir, "observations.csv")
+
+    landmarkCsv = os.path.join(outputDir, "landmarks.csv")
+    landmarks = cself.CameraChain.camList[0].detector.target().points()
+    with open(landmarkCsv, 'w') as stream:
+        header = ', '.join(["landmark index", "landmark position x [m]",
+                            "landmark position y [m]", "landmark position z [m]"])
+        stream.write('{}\n'.format(header))
+        for index, row in enumerate(landmarks):
+            stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
+
+    imuCsv = os.path.join(outputDir, "imu.csv")
+    with open(imuCsv, "w") as stream:
+        header = ', '.join(["timestamp [ns]", "acc x [m/s^2]", "acc y [m/s^2]", "acc z [m/s^2]",
+                            "gyro x [rad/s]", "gyro y [rad/s]", "gyro z [rad/s]"])
+        stream.write('{}\n'.format(header))
+        for time, omega, alpha in cself.ImuList[0].dataset:
+            omegaString = ', '.join(map(str, omega))
+            alphaString = ', '.join(map(str, alpha))
+            stream.write("{}, {}, {}\n".format(acvTimeToNanosecondString(time), omegaString, alphaString))
+
 
 def loadArrayWithHeader(arrayFile):
     with open(arrayFile) as f:
@@ -436,7 +492,3 @@ def selectiveLoadPoseBSpline(filename):
         poseSpline = generateInitialSpline(timeList, smTransformList)
         poseDv = asp.BSplinePoseDesignVariable(poseSpline)
         return poseDv
-
-
-
-
