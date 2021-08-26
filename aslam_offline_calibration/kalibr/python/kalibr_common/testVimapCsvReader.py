@@ -1,19 +1,23 @@
 import os
 import sm
 import VimapCsvReader
+import VimapCsvWriter
 
 vimapFolder = ""
+
 
 def testLoadImuData():
     csv = os.path.join(vimapFolder, 'imu.csv')
     if os.path.isfile(csv):
         VimapCsvReader.loadImuData(csv)
 
+
 def testLoadTrackCsv():
     csv = os.path.join(vimapFolder, 'tracks.csv')
     if os.path.isfile(csv):
         a, b, c = VimapCsvReader.loadTrackCsv(csv)
         print("{} {}".format(b, c))
+
 
 def testLoadObservationCsv():
     csv = os.path.join(vimapFolder, 'observations.csv')
@@ -26,16 +30,19 @@ def testLoadLandmarkCsv():
     if os.path.isfile(csv):
         a = VimapCsvReader.loadLandmarkCsv(csv)
 
+
 def testLoadVertexCsv():
     csv = os.path.join(vimapFolder, 'vertices.csv')
     if os.path.isfile(csv):
         a = VimapCsvReader.loadVertexCsv(csv)
+
 
 def testVimapImuCsvReader():
     if os.path.isdir(vimapFolder):
         dataset = VimapCsvReader.VimapImuCsvReader(vimapFolder, '/imu0', [2, 2.5], False)
         for timestamp, omega, alpha in dataset:
             print("{:.6f} {} {}".format(timestamp.toSec(), omega, alpha))
+
 
 def testRemoveElements():
     a = [True, False, True, False, False, True, False]
@@ -44,8 +51,10 @@ def testRemoveElements():
     d = [e for i, e in enumerate(b) if a[i]]
     assert c == d
 
+
 def testFrameObservation():
     print("sentinel {}".format(VimapCsvReader.FrameObservation.landmarkSentinel()))
+
 
 def testVimapCsvReader():
     if os.path.isdir(vimapFolder):
@@ -54,6 +63,7 @@ def testVimapCsvReader():
         print('Total frames {}'.format(dataset.numImages()))
         print('First frame {}'.format(targetObservations[0]))
         print('Last frame {}'.format(targetObservations[-1]))
+
 
 def testPnPObservation():
     import aslam_cv as acv
@@ -94,3 +104,32 @@ def testPnPObservation():
     assert np.allclose(residual.t(), np.array([0, 0, 0]))
     assert np.allclose(residual.q(), np.array([0, 0, 0, 1]))
     assert obs.hasSuccessfulObservation()
+
+
+def testFindNearestTimeSince():
+    import aslam_cv as acv
+    timeList = []
+    timeList.append(acv.Time(10.0))
+    timeList.append(acv.Time(10.1))
+    timeList.append(acv.Time(10.2)),
+    timeList.append(acv.Time(10.3))
+    index = 0
+    time = acv.Time(9.0)
+    newindex = VimapCsvWriter.findNearestTimeSince(timeList, index, time)
+    assert newindex == 0
+
+    time = acv.Time(10.04)
+    newindex = VimapCsvWriter.findNearestTimeSince(timeList, newindex, time)
+    assert newindex == 0
+    
+    time = acv.Time(10.06)
+    newindex = VimapCsvWriter.findNearestTimeSince(timeList, newindex, time)
+    assert newindex == 1
+
+    time = acv.Time(10.3)
+    newindex = VimapCsvWriter.findNearestTimeSince(timeList, newindex, time)
+    assert newindex == 3
+
+    time = acv.Time(10.4)
+    newindex = VimapCsvWriter.findNearestTimeSince(timeList, newindex, time)
+    assert newindex == 3

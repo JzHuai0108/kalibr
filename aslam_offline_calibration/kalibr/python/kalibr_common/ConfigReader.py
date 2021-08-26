@@ -437,6 +437,9 @@ class CameraParameters(ParametersBase):
         self.checkLineDelay(lineDelay)
         self.data["line_delay_nanoseconds"] = lineDelay
 
+    def hasImageNoise(self):
+        return "image_noise_std_dev" in self.data
+
     def checkImageNoise(self, imageNoise):
         if not isinstance(imageNoise, float) or imageNoise < 0.0:
             self.raiseError("invalid image noise")

@@ -162,7 +162,7 @@ def saveCameraIntrinsics(cameraList, imageTopics, resultFile):
         camParams.setResolution([P.ru(), P.rv()])
         dist_coeffs = P.distortion().getParameters().flatten(1)
         camParams.setDistortion(distortionModel, dist_coeffs)
-
+        camParams.setImageNoise(1.0)
         chain.addCameraAtEnd(camParams)
 
     chain.writeYaml()
@@ -218,7 +218,7 @@ def fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated"
     print("Initializing camera chain:")
     chain = kc.CameraChainParameters(chain_yaml)
     chain.printDetails()
-    parsed.reprojection_sigma = 1.0
+
     parsed.extractionstepping = False
 
     camChain = sens.IccCameraChain(chain, targetConfig, parsed)

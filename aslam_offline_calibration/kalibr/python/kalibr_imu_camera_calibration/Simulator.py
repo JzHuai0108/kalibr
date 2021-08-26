@@ -2,7 +2,7 @@ import copy
 import math
 import os
 from random import gauss
-import sys
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -344,7 +344,7 @@ class RsCameraSimulator(object):
                 ynoise = gauss(0.0, reprojectionSigma)
                 noisyPoint = [noisyValue(imagePoint0[0, 0], self.imageWidth, xnoise),
                               noisyValue(imagePoint0[1, 0], self.imageHeight, ynoise)]
-                frameKeypoints.append((iota, kpId, noisyPoint[0], noisyPoint[1], 12))
+                frameKeypoints.append((iota, kpId, noisyPoint[0], noisyPoint[1], reprojectionSigma, 12, -1))
                 imageCornerProjectedOffset.append(np.linalg.norm([initialImagePoint[0, 0] - noisyPoint[0],
                                                                   initialImagePoint[1, 0] - noisyPoint[1]]))
                 kpId += 1
@@ -368,13 +368,17 @@ class RsCameraSimulator(object):
         bins = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, \
                 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 9.0, 10.0]
         imageNoise = self.cameraConfig.getImageNoise()
+        
         frameKeypointList = list()
-        landmark_observations = dict()
+
+        landmarkObservations = dict()
         for iota in range(self.targetObservation.getTotalTargetPoint()):
-            landmark_observations[iota]=list()
+            landmarkObservations[iota] = list()
+
         cameraIndex = 0 # assume only one camera is used.
         cameraTimeOffset = self.timeOffset
         for vertexId, frameTime in enumerate(trueFrameTimes):
+            rawFrameTime = frameTime - cameraTimeOffset
             _, noisyKeypoints, keypointOffsets = \
                 self.newtonMethodToRsProjection(frameTime,
                                                 float(self.cameraConfig.getLineDelayNanos()) * 1e-9,
@@ -384,34 +388,14 @@ class RsCameraSimulator(object):
             if vertexId % 300 == 0:
                 print('  Projected {:d} target landmarks for state at {:.9f}'.format(len(noisyKeypoints), frameTime))
             for keypoint in noisyKeypoints:
-                landmark_observations[keypoint[0]].append(
-                    (vertexId, keypoint[1], keypoint[2], keypoint[3], keypoint[4]))
-            frameKeypointList.append(noisyKeypoints)
+                landmarkObservations[keypoint[0]].append((vertexId, cameraIndex, keypoint[1]))
+            frameKeypointList.append((acv.Time(rawFrameTime), vertexId, cameraIndex, noisyKeypoints))
 
         observationCsv = os.path.join(outputDir, "observations.csv")
-        with open(observationCsv, 'w') as stream:
-            header = ', '.join(["vertex index", "frame index", "keypoint index", "landmark index"])
-            stream.write('{}\n'.format(header))
-            probe = 0
-            for landmarkId, observationList in sorted(landmark_observations.iteritems()):
-                assert probe == landmarkId
-                for observation in observationList:
-                    stream.write('{}, {}, {}, {}\n'.format(observation[0], cameraIndex, observation[1], landmarkId))
-                probe += 1
+        saveObservations(landmarkObservations, observationCsv)
 
         trackCsv = os.path.join(outputDir, "tracks.csv")
-        with open(trackCsv, 'w') as stream:
-            header = ', '.join(
-                ["timestamp [ns]", "vertex index", "frame index", "keypoint index", "keypoint measurement 0 [px]",
-                 "keypoint measurement 1 [px]", "keypoint measurement uncertainty", "keypoint scale",
-                 "keypoint track id"])
-            stream.write('{}\n'.format(header))
-            for vertexId, frameKeypoints in enumerate(frameKeypointList):
-                for keypoint in frameKeypoints:
-                    timeString = BSplineIO.secondToNanosecondString(trueFrameTimes[vertexId] - cameraTimeOffset)
-                    stream.write('{}, {}, {}, {:d}, {:.5f}, {:.5f}, {}, {}, {}\n'.format(
-                        timeString, vertexId, cameraIndex, keypoint[1], keypoint[2], keypoint[3], imageNoise,
-                        keypoint[4], -1))
+        saveTracks(frameKeypointList, trackCsv)
 
         print('  Written landmark observations to {}'.format(observationCsv))
         print('  Histogram of norm of the offset due to line delay and noise')

@@ -351,10 +351,14 @@ class IccCalibrator(object):
                     accBiasList.append(acc_bias)
                 gyroBiasDiff = np.diff(gyroBiasList, axis=0)
                 accBiasDiff = np.diff(accBiasList, axis=0)
+                # TODO(jhuai): use which one?
+                gyroWalkDiscrete = np.std(gyroBiasDiff, 0, ddof=1)
+                accWalkDiscrete = np.std(accBiasDiff, 0, ddof=1)
 
-                gyroWalkDiscrete = np.std(gyroBiasList, 0, ddof=1)
+                # gyroWalkDiscrete = np.std(gyroBiasList, 0, ddof=1)
+                # accWalkDiscrete = np.std(accBiasList, 0, ddof=1)
+
                 gyroWalk = gyroWalkDiscrete * rootf
-                accWalkDiscrete = np.std(accBiasList, 0, ddof=1)
                 accWalk = accWalkDiscrete * rootf
 
                 gyroWalkList[fid][0] = biasSamplingInterval

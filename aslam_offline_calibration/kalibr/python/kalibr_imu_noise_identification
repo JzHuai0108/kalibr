@@ -43,20 +43,48 @@ def main():
     # For safety, we will work on the copy of the imu yamls.
     imu_yamls_orig = args.imu_yamls
     imu_yamls = []
-    for imufile in args.imu_yamls:
+    for imufile in imu_yamls_orig:
         dst = os.path.basename(os.path.splitext(imufile)[0]) + "_temp.yaml"
         shutil.copyfile(imufile, dst)
         imu_yamls.append(dst)
     args.imu_yamls = imu_yamls
 
+    chain_yaml_orig = args.chain_yaml
+    chain_yaml = os.path.basename(os.path.splitext(chain_yaml_orig)[0]) + "_temp.yaml"
+    shutil.copyfile(chain_yaml_orig, chain_yaml)
+    args.chain_yaml = chain_yaml
+
     args.identifyNoises = True
-    args.saveVimap = True
     noiseParameterNames = ["accelerometer_noise_density", "accelerometer_random_walk", 
            "gyroscope_noise_density", "gyroscope_random_walk"]
 
-    for outerLoopId in range(2):
+    for outerLoopId in range(5):
+        if outerLoopId == 0:
+            args.saveVimap = True
+        else:
+            args.saveVimap = False
         residualStats = kalibr_calibrate_imu_camera.calibrate_imu_camera(args)
         print('Final cost function value {}'.format(residualStats['JFinal']))
+
+        # update camera noise
+        for camId in range(len(residualStats) - 2):
+            camName = 'cam{}'.format(camId)
+            if camName in residualStats:
+                data = residualStats[camName]
+                print('\nCamera {} noises:'.format(camId))
+                print('\timage_noise_std_dev: {}'.format(data["image_noise_std_dev"]))
+
+                lines = loadText(args.chain_yaml)
+                occurrence = 0
+                for lid, line in enumerate(lines):
+                    if "image_noise_std_dev" in line:
+                        if occurrence == camId:
+                            lines[lid] = "  image_noise_std_dev: {}\n".format(np.average(data["image_noise_std_dev"]))
+                            break
+                        occurrence += 1
+                dumpText(lines, chain_yaml)
+
+        # update IMU noise
         for imuId in range(len(residualStats) - 2):
             imuName = 'imu{}'.format(imuId)
             if imuName in residualStats:
@@ -71,10 +99,11 @@ def main():
                         if noise in line:
                             lines[lid] = "{}: {}\n".format(noise, np.average(data[noise]))
                             break
-                    for noise in ["accelerometer_random_walk", "gyroscope_random_walk"]:
-                        if noise in line:
-                            lines[lid] = "{}: {}\n".format(noise, np.average(data[noise][2, 1:]))
-                            break
+                    # TODO(jhuai): maybe we should not update random walk parameters.
+                    # for noise in ["accelerometer_random_walk", "gyroscope_random_walk"]:
+                    #     if noise in line:
+                    #         lines[lid] = "{}: {}\n".format(noise, np.average(data[noise][2, 1:]))
+                    #         break
                 dumpText(lines, imu_yamls[imuId])
     print('The identified IMU noise parameters are at {}!'.format('\n\t'.join(imu_yamls)))
 

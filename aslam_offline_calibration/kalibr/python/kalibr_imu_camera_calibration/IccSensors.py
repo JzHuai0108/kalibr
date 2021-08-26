@@ -656,6 +656,12 @@ class IccCameraChain():
         self.camList = []
         for camNr in range(0, chainConfig.numCameras()):
             camConfig = chainConfig.getCameraParameters(camNr)
+
+            if camConfig.hasImageNoise():
+                reprojectionSigma = camConfig.getImageNoise()
+            else:
+                reprojectionSigma = parsed.reprojection_sigma
+
             dataset = initCameraDataset(parsed.bagfile[0], camConfig.getRosTopic(),
                                         parsed.bag_from_to, parsed.perform_synchronization)
             
@@ -664,7 +670,7 @@ class IccCameraChain():
                                             targetConfig, 
                                             dataset, 
                                             #Ultimately, this should come from the camera yaml.
-                                            reprojectionSigma=parsed.reprojection_sigma, 
+                                            reprojectionSigma=reprojectionSigma,
                                             showCorners=parsed.showextraction,
                                             showReproj=parsed.showextraction, 
                                             showOneStep=parsed.extractionstepping) )  

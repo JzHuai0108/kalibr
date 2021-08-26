@@ -222,7 +222,7 @@ def calibrate_imu_camera(parsed):
                       verbose = parsed.verbose)
 
     if parsed.saveVimap:
-        BSplineIO.saveVimap(iCal, "")
+        kc.VimapCsvWriter.saveVimap(iCal, "")
 
     print
     print "Before Optimization"

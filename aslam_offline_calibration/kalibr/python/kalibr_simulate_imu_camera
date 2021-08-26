@@ -85,9 +85,9 @@ def parseArgs():
 
     #configuration files
     groupCam = parser.add_argument_group('Camera system configuration')
-    groupCam.add_argument('--cam', dest='chain_yaml', help='Camera-IMU system configuration as yaml file', required=True, action=Once)
-    groupCam.add_argument('--reprojection-sigma', type=float, default=1.0, dest='reprojection_sigma',
-            help='Standard deviation of the distribution of reprojected corner points [px]. (default: %(default)s)')
+    groupCam.add_argument('--cam', dest='chain_yaml', help='Camera-IMU system configuration as yaml file '
+                                                           'which should include the field image_noise_std_dev',
+                          required=True, action=Once)
 
     groupImu = parser.add_argument_group('IMU configuration')
     groupImu.add_argument('--imu', dest='imu_yaml', help=('Yaml holding the IMU noise parameters.'
