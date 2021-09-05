@@ -37,8 +37,16 @@ def dumpText(lines, fn):
             stream.write("{}".format(line))
 
 
+def addParserArguments(parser):
+    groupNoise = parser.add_argument_group('Noise identification')
+    groupNoise.add_argument('--max_noise_opt_iters', type=int, default = 5,
+                            help='max number of iterations for IMU noise optimization. (default: %(default)s)')
+
+
 def main():
-    args = kalibr_calibrate_imu_camera.parseArgs()
+    parser = kalibr_calibrate_imu_camera.createParser()
+    addParserArguments(parser)
+    args = kalibr_calibrate_imu_camera.parseArgs(parser)
 
     # For safety, we will work on the copy of the imu yamls.
     imu_yamls_orig = args.imu_yamls

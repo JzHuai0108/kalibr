@@ -392,10 +392,10 @@ class RsCameraSimulator(object):
             frameKeypointList.append((acv.Time(rawFrameTime), vertexId, cameraIndex, noisyKeypoints))
 
         observationCsv = os.path.join(outputDir, "observations.csv")
-        saveObservations(landmarkObservations, observationCsv)
+        kc.VimapCsvWriter.saveObservations(landmarkObservations, observationCsv)
 
         trackCsv = os.path.join(outputDir, "tracks.csv")
-        saveTracks(frameKeypointList, trackCsv)
+        kc.VimapCsvWriter.saveTracks(frameKeypointList, trackCsv)
 
         print('  Written landmark observations to {}'.format(observationCsv))
         print('  Histogram of norm of the offset due to line delay and noise')

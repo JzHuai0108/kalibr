@@ -25,7 +25,8 @@ class Once(argparse.Action):
             raise argparse.ArgumentError(None, msg)
         setattr(namespace, self.dest, values)
 
-def parseArgs():
+
+def createParser():
     class KalibrArgParser(argparse.ArgumentParser):
         def error(self, message):
             self.print_help()
@@ -114,12 +115,15 @@ def parseArgs():
                                 help='save extracted camera measurements and IMU data in maplab csv format.')
     outputSettings.add_argument('--identifyNoises', action='store_true',
                                 help='compute residual statistics after calibration.')
+    return parser
 
+
+def parseArgs(parser):
     #print help if no argument is specified
     if len(sys.argv)==1:
         parser.print_help()
         sys.exit(2)
-    
+
     #Parser the argument list
     try:
         parsed = parser.parse_args()
@@ -136,9 +140,11 @@ def parseArgs():
     
     return parsed
 
+
 def main():
     # Parse the arguments
-    parsed = parseArgs()
+    parser = createParser()
+    parsed = parseArgs(parser)
 
     calibrate_imu_camera(parsed)
 
