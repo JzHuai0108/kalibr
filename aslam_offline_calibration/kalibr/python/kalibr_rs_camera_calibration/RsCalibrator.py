@@ -99,10 +99,11 @@ class RsCalibratorConfiguration(object):
 
 
 class ImuDataDescription(object):
-    def __init__(self, bagfiles, bag_from_to, perform_sync):
+    def __init__(self, bagfiles, bag_from_to, perform_sync, constant_bias):
         self.bagfile = bagfiles
         self.bag_from_to = bag_from_to
         self.perform_synchronization = perform_sync
+        self.constant_bias = constant_bias
 
 
 class RsCalibrator(object):
@@ -326,7 +327,7 @@ class RsCalibrator(object):
         return poseSpline
 
 
-    def loadImu(self, imu_yaml, imu_model, bagfile, bag_from_to, perform_sync):
+    def loadImu(self, imu_yaml, imu_model, imuDescription):
         if imu_yaml is None:
             self.__ImuList = None
             return
@@ -334,10 +335,9 @@ class RsCalibrator(object):
         imuConfig = kc.ImuParameters(imu_yaml)
         imuConfig.printDetails()
 
-        imu_data = ImuDataDescription([bagfile], bag_from_to, perform_sync)
         if imu_model != "calibrated":
             raise Exception("Only calibrated IMU model is supported for simplicity!")
-        imus.append(sens.IccImu(imuConfig, imu_data, isReferenceImu=True, estimateTimedelay=False))
+        imus.append(sens.IccImu(imuConfig, imuDescription, isReferenceImu=True, estimateTimedelay=False))
         self.__ImuList = imus
 
 

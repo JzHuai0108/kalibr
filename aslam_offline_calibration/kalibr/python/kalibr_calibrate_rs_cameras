@@ -121,6 +121,11 @@ def __parseArgs():
     groupImu.add_argument('--imu-model', dest='imu_model', help= \
             ('The IMU models to estimate. Currently supported are \'calibrated\','
              ' \'scale-misalignment\' and \'scale-misalignment-size-effect\'.'), default="calibrated")
+    groupImu.add_argument('--constant_bias', action='store_true', help="bias is constant or time-varying")
+    groupImu.add_argument('--perform_synchronization', action='store_true',
+                           help=('Perform a clock synchronization according to '
+                                '\'Clock synchronization algorithms for network measurements\' '
+                                 'by Zhang et al. (2002).'))
 
     outputSettings = parser.add_argument_group('Output options')
     outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Enable (really) verbose output (disables plots).')
@@ -214,7 +219,9 @@ def main():
     ######
     ## Calibrate
     calibrator = rscc.RsCalibrator()
-    calibrator.loadImu(parsed.imu_yaml, parsed.imu_model, parsed.bagfile, parsed.bag_from_to, False)
+    imuDescription = rscc.ImuDataDescription([parsed.bagfile], parsed.bag_from_to,
+                                             parsed.perform_synchronization, parsed.constant_bias)
+    calibrator.loadImu(parsed.imu_yaml, parsed.imu_model, imuDescription)
     tic = time.time()
     calibrator.calibrate(cameraGeometry, observations, config)
     toc = time.time()

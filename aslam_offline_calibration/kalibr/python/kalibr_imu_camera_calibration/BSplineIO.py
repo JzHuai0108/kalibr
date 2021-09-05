@@ -150,11 +150,8 @@ def saveImuMeasurementsFromPoseBSpline(cself, filename):
     predictedAng_body =  np.array([err.getPredictedMeasurement() for err in imu.gyroErrors])    
     predictedAccel_body =  np.array([err.getPredictedMeasurement() for err in imu.accelErrors])
 
-    gyroBias = imu.gyroBiasDv.spline()    
-    gyro_bias_spline = np.array([gyroBias.evalD(t,0) for t in times])
-    
-    accBias = imu.accelBiasDv.spline()    
-    acc_bias_spline = np.array([accBias.evalD(t,0) for t in times])
+    gyro_bias_spline = np.array([imu.evaluateGyroBias(t) for t in times])
+    acc_bias_spline = np.array([imu.evaluateAccelerometerBias(t) for t in times])
 
     print >> sys.stdout, '\tEpitome of predicted inertial measurements'
     print >> sys.stdout, "\t#times", times.shape
@@ -182,22 +179,6 @@ def saveBSpline(cself, outputDir):
 
     computeCheckData = False
     if computeCheckData:
-        timeList = list()
-        for obs in cself.CameraChain.camList[0].targetObservations:
-            frameTime = cself.CameraChain.camList[0].cameraTimeToImuTimeDv.toScalar() + obs.time().toSec() + \
-                    cself.CameraChain.camList[0].timeshiftCamToImuPrior
-            if frameTime > imuTimes[0] and frameTime < imuTimes[-1]:
-                timeList.append(frameTime)
-        refStateTimes = np.array(timeList)
-        refStateFile = "states_check.txt"
-        refStateStream = open(refStateFile, 'w')
-        print >> sys.stdout, "  Saving system states at camera rate generated from B-spline to", refStateFile
-        imu = cself.ImuList[0]
-        gyroBias = imu.gyroBiasDv.spline()
-        accBias = imu.accelBiasDv.spline()
-        saveStates(refStateTimes, poseSplineDv, gyroBias, accBias, 0.0, refStateStream)
-        refStateStream.close()
-
         refImuFile = "imu_check.txt"
         saveImuMeasurementsFromPoseBSpline(cself, refImuFile)
 
@@ -222,29 +203,30 @@ def saveBSpline(cself, outputDir):
     poseSpline.saveSplineToFile(poseFile)   
     print("  saved pose B splines of order {} to {}".format(poseSpline.splineOrder(), poseFile))
 
-    imu = cself.ImuList[0]
-    gyroBias = imu.gyroBiasDv.spline()   
-    accBias = imu.accelBiasDv.spline()
-
-    gyroBiasFile = "bspline_gyro_bias.txt"
-    gyroBias.saveSplineToFile(gyroBiasFile)
-    print("  saved gyro bias B splines of order {} to {}".format(gyroBias.splineOrder(), gyroBiasFile))
-
-    accBiasFile = "bspline_acc_bias.txt"
-    accBias.saveSplineToFile(accBiasFile)    
-    print("  saved acc bias B splines of order {} to {}".format(accBias.splineOrder(), accBiasFile))
-
     print('Saved B splines of start and finish time')
     print('\t\t\t\tstart time\t\tfinish time')
     print('\tposeSpline\t{:.9f}\t{:.9f}'.format(poseSpline.t_min(), poseSpline.t_max()))
-    print('\tgyroBias\t{:.9f}\t{:.9f}'.format(gyroBias.t_min(), gyroBias.t_max()))
-    print('\taccBias\t\t{:.9f}\t{:.9f}'.format(accBias.t_min(), accBias.t_max()))
+    imu = cself.ImuList[0]
+    if not imu.constantBias:
+        gyroBias = imu.gyroBiasDv.spline()
+        accBias = imu.accelBiasDv.spline()
+        print('\tgyroBias\t{:.9f}\t{:.9f}'.format(gyroBias.t_min(), gyroBias.t_max()))
+        print('\taccBias\t\t{:.9f}\t{:.9f}'.format(accBias.t_min(), accBias.t_max()))
+
+        gyroBiasFile = "bspline_gyro_bias.txt"
+        gyroBias.saveSplineToFile(gyroBiasFile)
+        print("  saved gyro bias B splines of order {} to {}".format(gyroBias.splineOrder(), gyroBiasFile))
+
+        accBiasFile = "bspline_acc_bias.txt"
+        accBias.saveSplineToFile(accBiasFile)
+        print("  saved acc bias B splines of order {} to {}".format(accBias.splineOrder(), accBiasFile))
 
 
 def loadArrayWithHeader(arrayFile):
     with open(arrayFile) as f:
         lines = (line for line in f if not (line.startswith('#') or line.startswith('%')))        
         return np.loadtxt(lines, delimiter=' ', skiprows=0)
+
 
 def getSplineOrder(knotCoeffFile):
     with open(knotCoeffFile, 'r') as stream:

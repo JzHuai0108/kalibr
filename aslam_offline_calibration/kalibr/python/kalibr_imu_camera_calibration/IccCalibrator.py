@@ -163,8 +163,7 @@ class IccCalibrator(object):
             imu.addGyroscopeErrorTerms(problem, self.poseDv, mSigma=huberGyro, gyroNoiseScale=gyroNoiseScale, g_w=self.gravityExpression)
 
             # Add the bias motion terms.
-            if doBiasMotionError:
-                imu.addBiasMotionTerms(problem)
+            imu.addBiasMotionTerms(problem)
             
         # Add the pose motion terms.
         if doPoseMotionError:
@@ -332,9 +331,7 @@ class IccCalibrator(object):
             padding = 1.0 # remove padding from both ends to avert ripple effect.
             clampstart = self.poseDv.spline().t_min() + padding
             clampend = self.poseDv.spline().t_max() - padding
-            gyroBiasSpline = imu.gyroBiasDv.spline()
-            accBiasSpline = imu.accelBiasDv.spline()
-                
+
             samplingFactor = [0.1, 0.3, 1, 3, 10]
             accWalkList = np.zeros((len(samplingFactor), 4))
             gyroWalkList = np.zeros((len(samplingFactor), 4))
@@ -345,8 +342,8 @@ class IccCalibrator(object):
                 gyroBiasList = []
                 accBiasList = []
                 for time in imuTimes:
-                    gyro_bias = gyroBiasSpline.eval(time)
-                    acc_bias = accBiasSpline.eval(time)
+                    gyro_bias = imu.evaluateGyroBias(time)
+                    acc_bias = imu.evaluateAccelerometerBias(time)
                     gyroBiasList.append(gyro_bias)
                     accBiasList.append(acc_bias)
                 gyroBiasDiff = np.diff(gyroBiasList, axis=0)

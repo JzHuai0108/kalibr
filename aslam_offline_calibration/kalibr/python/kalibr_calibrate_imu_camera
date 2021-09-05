@@ -88,7 +88,8 @@ def createParser():
     groupImu.add_argument('--imu-delay-by-correlation', action='store_true', dest='estimate_imu_delay', \
                           help='Estimate the delay between multiple IMUs by correlation. By default, no temporal calibration between IMUs will be performed.', required=False)      
     groupImu.add_argument('--imu-models', nargs='+', dest='imu_models', help='The IMU models to estimate. Currently supported are \'calibrated\', \'scale-misalignment\' and \'scale-misalignment-size-effect\'.', action=Once)
-    
+    groupImu.add_argument('--constant_bias', action='store_true', help="bias is constant or time-varying")
+
     groupTarget = parser.add_argument_group('Calibration target')
     groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file', action=Once)
     
@@ -102,6 +103,11 @@ def createParser():
                           help='A time offset to pad the blocks generated in the hessian/jacobian to ensure'
                                ' a constant symbolic representation of the batch estimation problem, even when a change'
                                ' in the shutter timing shifts the capture time to another spline segment.')
+    groupOpt.add_argument('--pose_knots_per_second', type=int, default=100,
+                          help='Pose knots per second (default: %(default)s)')
+    groupOpt.add_argument('--bias_knots_per_second', type=int, default=50,
+                          help='Bias knots per second (default: %(default)s). '
+                               'This value will be ignored if constant_bias is set.')
 
     #Result options  
     outputSettings = parser.add_argument_group('Output options')
@@ -157,8 +163,12 @@ def calibrate_imu_camera(parsed):
         sm.setLoggingLevel(sm.LoggingLevel.Info)
         
     signal.signal(signal.SIGINT, signal_exit)
-            
-    print "Initializing IMUs:"
+
+    dash = '-' * 80
+    print(dash)
+    print("IMU camera calibration starts.")
+
+    print("Initializing IMUs:")
     if  len(parsed.imu_yamls) == 1 and not parsed.imu_models:
         #Maintain backwards compatibility with previous interface.
         parsed.imu_models = ['calibrated']
@@ -215,10 +225,10 @@ def calibrate_imu_camera(parsed):
     print
     print "Building the problem"
     iCal.buildProblem(splineOrder=6, 
-                      poseKnotsPerSecond=100, 
-                      biasKnotsPerSecond=50, 
+                      poseKnotsPerSecond=parsed.pose_knots_per_second,
+                      biasKnotsPerSecond=parsed.bias_knots_per_second,
                       doPoseMotionError=False,
-                      doBiasMotionError=True,
+                      doBiasMotionError=not parsed.constant_bias,
                       blakeZisserCam=-1,
                       huberAccel=-1,
                       huberGyro=-1,

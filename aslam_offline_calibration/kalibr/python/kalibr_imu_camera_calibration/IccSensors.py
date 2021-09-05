@@ -68,12 +68,12 @@ class IccCamera():
         #initialize the camera data
         self.camera = kc.AslamCamera.fromParameters( camConfig )
 
+        self.setupCalibrationTarget(targetConfig, showExtraction=showCorners, showReproj=showReproj,
+                                    imageStepping=showOneStep)
         if self.dataset.hasFeatureAssociations():
             self.targetObservations = self.dataset.getFeatureAssociations()
         else:
             # extract corners
-            self.setupCalibrationTarget(targetConfig, showExtraction=showCorners, showReproj=showReproj,
-                                        imageStepping=showOneStep)
             multithreading = not (showCorners or showReproj or showOneStep)
             self.targetObservations = kc.extractCornersFromDataset(self.dataset, self.detector, multithreading=multithreading)
         numObservations = [len(obs.getCornersImageFrame()) for obs in self.targetObservations]
@@ -853,7 +853,7 @@ class IccImu(object):
         #load dataset
         self.dataset = initImuDataset(parsed.bagfile[0], imuConfig.getRosTopic(), \
                                       parsed.bag_from_to, parsed.perform_synchronization)
-        
+
         #statistics
         self.accelUncertaintyDiscrete, self.accelRandomWalk, self.accelUncertainty = self.imuConfig.getAccelerometerStatistics()
         self.gyroUncertaintyDiscrete, self.gyroRandomWalk, self.gyroUncertainty = self.imuConfig.getGyroStatistics()
@@ -861,7 +861,8 @@ class IccImu(object):
         #init GyroBiasPrior (+ count for recursive averaging if we have more than 1 measurement = >1 cameras)
         self.GyroBiasPrior = np.array([0,0,0])
         self.GyroBiasPriorCount = 0
-        
+        self.constantBias = parsed.constant_bias
+
         #load the imu dataset
         self.loadImuData()
 
@@ -908,13 +909,21 @@ class IccImu(object):
             
     def addDesignVariables(self, problem):
         #create design variables
-        self.gyroBiasDv = asp.EuclideanBSplineDesignVariable( self.gyroBias )
-        self.accelBiasDv = asp.EuclideanBSplineDesignVariable( self.accelBias )
+        if self.constantBias:
+            self.gyroBiasDv = aopt.EuclideanPointDv(self.GyroBiasPrior)
+            self.gyroBiasDv.setActive(True)
+            problem.addDesignVariable(self.gyroBiasDv, ic.HELPER_GROUP_ID)
+            self.accelBiasDv = aopt.EuclideanPointDv(np.zeros(3))
+            self.accelBiasDv.setActive(True)
+            problem.addDesignVariable(self.accelBiasDv, ic.HELPER_GROUP_ID)
+        else:
+            self.gyroBiasDv = asp.EuclideanBSplineDesignVariable(self.gyroBias)
+            self.accelBiasDv = asp.EuclideanBSplineDesignVariable(self.accelBias)
         
-        ic.addSplineDesignVariables(problem, self.gyroBiasDv, setActive=True, \
-                                    group_id=ic.HELPER_GROUP_ID)
-        ic.addSplineDesignVariables(problem, self.accelBiasDv, setActive=True, \
-                                    group_id=ic.HELPER_GROUP_ID)
+            ic.addSplineDesignVariables(problem, self.gyroBiasDv, setActive=True, \
+                                        group_id=ic.HELPER_GROUP_ID)
+            ic.addSplineDesignVariables(problem, self.accelBiasDv, setActive=True, \
+                                        group_id=ic.HELPER_GROUP_ID)
 
         self.q_i_b_Dv = aopt.RotationQuaternionDv(self.q_i_b_prior)
         problem.addDesignVariable(self.q_i_b_Dv, ic.HELPER_GROUP_ID)
@@ -926,6 +935,40 @@ class IccImu(object):
         if not self.isReferenceImu:
             self.q_i_b_Dv.setActive(True)
             self.r_b_Dv.setActive(True)
+
+    def evaluateGyroBias(self, time):
+        """
+
+        :param time: double type, in seconds
+        :return:
+        """
+        if self.constantBias:
+            return self.gyroBiasDv.toEuclidean()
+        else:
+            return self.gyroBiasDv.spline().eval(time)
+
+    def gyroBiasExpression(self, time):
+        """
+
+        :param time: double type, in seconds
+        :return:
+        """
+        if self.constantBias:
+            return self.gyroBiasDv.toExpression()
+        else:
+            return self.gyroBiasDv.toEuclideanExpression(time, 0)
+
+    def evaluateAccelerometerBias(self, time):
+        if self.constantBias:
+            return self.accelBiasDv.toEuclidean()
+        else:
+            return self.accelBiasDv.spline().eval(time)
+
+    def accelerometerBiasExpression(self, time):
+        if self.constantBias:
+            return self.accelBiasDv.toExpression()
+        else:
+            return self.accelBiasDv.toEuclideanExpression(time, 0)
 
     def addAccelerometerErrorTerms(self, problem, poseSplineDv, g_w, mSigma=0.0, \
                                    accelNoiseScale=1.0):
@@ -951,7 +994,7 @@ class IccImu(object):
             if tk > poseSplineDv.spline().t_min() and tk < poseSplineDv.spline().t_max():
                 C_b_w = poseSplineDv.orientation(tk).inverse()
                 a_w = poseSplineDv.linearAcceleration(tk)
-                b_i = self.accelBiasDv.toEuclideanExpression(tk,0)
+                b_i = self.accelerometerBiasExpression(tk)
                 w_b = poseSplineDv.angularVelocityBodyFrame(tk)
                 w_dot_b = poseSplineDv.angularAccelerationBodyFrame(tk)
                 C_i_b = self.q_i_b_Dv.toExpression()
@@ -993,7 +1036,7 @@ class IccImu(object):
             if tk > poseSplineDv.spline().t_min() and tk < poseSplineDv.spline().t_max():
                 # GyroscopeError(measurement, invR, angularVelocity, bias)
                 w_b = poseSplineDv.angularVelocityBodyFrame(tk)
-                b_i = self.gyroBiasDv.toEuclideanExpression(tk,0)
+                b_i = self.gyroBiasExpression(tk)
                 C_i_b = self.q_i_b_Dv.toExpression()
                 w = C_i_b * w_b
                 gerr = ket.EuclideanError(im.omega, im.omegaInvR * weight, w + b_i)
@@ -1026,6 +1069,8 @@ class IccImu(object):
         self.accelBias.initConstantSpline(start,end,knots, np.zeros(3))
         
     def addBiasMotionTerms(self, problem):
+        if self.constantBias:
+            return
         Wgyro = np.eye(3) / (self.gyroRandomWalk * self.gyroRandomWalk)
         Waccel =  np.eye(3) / (self.accelRandomWalk * self.accelRandomWalk)
         gyroBiasMotionErr = asp.BSplineEuclideanMotionError(self.gyroBiasDv, Wgyro, 1)
@@ -1251,7 +1296,7 @@ class IccScaledMisalignedImu(IccImu):
             if tk > poseSplineDv.spline().t_min() and tk < poseSplineDv.spline().t_max():
                 C_b_w = poseSplineDv.orientation(tk).inverse()
                 a_w = poseSplineDv.linearAcceleration(tk)
-                b_i = self.accelBiasDv.toEuclideanExpression(tk,0)
+                b_i = self.accelBiasExpression(tk)
                 M = self.M_accel_Dv.toExpression()
                 w_b = poseSplineDv.angularVelocityBodyFrame(tk)
                 w_dot_b = poseSplineDv.angularAccelerationBodyFrame(tk)
@@ -1295,7 +1340,7 @@ class IccScaledMisalignedImu(IccImu):
                 # GyroscopeError(measurement, invR, angularVelocity, bias)
                 w_b = poseSplineDv.angularVelocityBodyFrame(tk)
                 w_dot_b = poseSplineDv.angularAccelerationBodyFrame(tk)
-                b_i = self.gyroBiasDv.toEuclideanExpression(tk,0)
+                b_i = self.gyroBiasExpression(tk)
                 C_b_w = poseSplineDv.orientation(tk).inverse()
                 a_w = poseSplineDv.linearAcceleration(tk)
                 r_b = self.r_b_Dv.toExpression()
@@ -1402,7 +1447,7 @@ class IccScaledMisalignedSizeEffectImu(IccScaledMisalignedImu):
             if tk > poseSplineDv.spline().t_min() and tk < poseSplineDv.spline().t_max():
                 C_b_w = poseSplineDv.orientation(tk).inverse()
                 a_w = poseSplineDv.linearAcceleration(tk)
-                b_i = self.accelBiasDv.toEuclideanExpression(tk,0)
+                b_i = self.accelerometerBiasExpression(tk)
                 M = self.M_accel_Dv.toExpression()
                 w_b = poseSplineDv.angularVelocityBodyFrame(tk)
                 w_dot_b = poseSplineDv.angularAccelerationBodyFrame(tk)

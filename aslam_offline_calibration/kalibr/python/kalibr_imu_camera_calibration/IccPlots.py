@@ -89,10 +89,14 @@ def plotAccelErrorPerAxis(cself, iidx, fno=1, clearFigure=True, noShow=False):
 
 def plotAccelBias(cself, imu_idx, fno=1, clearFigure=True, noShow=False):
     imu = cself.ImuList[imu_idx]
-    bias = imu.accelBiasDv.spline()
-    times = np.array([im.stamp.toSec() for im in imu.imuData if im.stamp.toSec() > bias.t_min() \
-                      and im.stamp.toSec() < bias.t_max() ])
-    acc_bias_spline = np.array([bias.evalD(t,0) for t in times]).T
+    if imu.constantBias:
+        bias = imu.accelBiasDv.toEuclidean()
+        times = np.array([im.stamp.toSec() for im in imu.imuData])
+        acc_bias_spline = np.array([bias for t in times]).T
+    else:
+        bias = imu.accelBiasDv.spline()
+        times = np.array([im.stamp.toSec() for im in imu.imuData if bias.t_min() < im.stamp.toSec() < bias.t_max()])
+        acc_bias_spline = np.array([bias.evalD(t,0) for t in times]).T
     times = times - times[0]     #remove time offset
 
     plotVectorOverTime(times, acc_bias_spline, 
@@ -109,10 +113,15 @@ def plotAccelBias(cself, imu_idx, fno=1, clearFigure=True, noShow=False):
 
 def plotAngularVelocityBias(cself, imu_idx, fno=1, clearFigure=True, noShow=False):
     imu = cself.ImuList[imu_idx]
-    bias = imu.gyroBiasDv.spline()
-    times = np.array([im.stamp.toSec() for im in imu.imuData if im.stamp.toSec() > bias.t_min() \
-                      and im.stamp.toSec() < bias.t_max() ])
-    gyro_bias_spline = np.array([bias.evalD(t,0) for t in times]).T
+    if imu.constantBias:
+        bias = imu.gyroBiasDv.toEuclidean()
+        times = np.array([im.stamp.toSec() for im in imu.imuData])
+        gyro_bias_spline = np.array([bias for t in times]).T
+    else:
+        bias = imu.gyroBiasDv.spline()
+        times = np.array([im.stamp.toSec() for im in imu.imuData if bias.t_min() < im.stamp.toSec() < bias.t_max()])
+        gyro_bias_spline = np.array([bias.evalD(t, 0) for t in times]).T
+
     times = times - times[0]     #remove time offset
     
     plotVectorOverTime(times, gyro_bias_spline, 
