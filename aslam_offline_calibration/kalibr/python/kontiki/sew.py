@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 """ Spline Error Weighting
 ##########################
 
@@ -139,7 +142,7 @@ def find_max_quality_dt(quality_func, min_q, min_dt, max_dt, verbose=False):
                 return max_quality_dt                
 
 
-def find_uniform_knot_spacing_spectrum(Xhat, times, quality, *, verbose=False, min_dt=None, max_dt=None):
+def find_uniform_knot_spacing_spectrum(Xhat, times, quality, placeholder=None, verbose=False, min_dt=None, max_dt=None):
     "Find the uniform knot spacing that keeps quality percent signal energy"
     
     sample_rate = 1 / np.mean(np.diff(times))
@@ -160,7 +163,7 @@ def find_uniform_knot_spacing_spectrum(Xhat, times, quality, *, verbose=False, m
     return find_max_quality_dt(quality_func, 1.0, min_dt, max_dt, verbose=verbose)
     
 
-def find_uniform_knot_spacing(signal, times, quality, *, verbose=False):
+def find_uniform_knot_spacing(signal, times, quality, placeholder=None, verbose=False):
     "Find the uniform knot spacing that keeps quality percent signal energy"
     
     Xhat = make_reference_spectrum(signal)
@@ -176,7 +179,7 @@ def make_reference_spectrum(signal):
     d, _ = signal.shape
     S = np.fft.fft(signal, axis=1)
     S[:, 0] = 0 # Remove DC component
-    Xhat = np.sqrt(1/d) * np.linalg.norm(S, axis=0)
+    Xhat = np.sqrt(1.0/d) * np.linalg.norm(S, axis=0)
     return Xhat
 
 
@@ -196,7 +199,7 @@ def dt_to_variance_spectrum(spectrum, freqs, spline_dt):
     return EE / len(spectrum), HH / len(spectrum)
     
     
-def knot_spacing_and_variance(signal, times, quality, *, min_dt=None, max_dt=None, verbose=False):
+def knot_spacing_and_variance(signal, times, quality, placeholder=None, min_dt=None, max_dt=None, verbose=False):
     """Find knot spacing and variance from signal
 
     Given a quality value, this function first determines the maximum knot spacing

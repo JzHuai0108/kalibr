@@ -266,15 +266,15 @@ def atArrayMinimum(array, dataColumn, checkRow, halfWindow, tol):
         return False
 
 
-def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windowDuration, omegaTol):
+def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windowDuration, varOmegaTol):
     """
 
     :param baseCamera: The single camera.
     :param predictedImuDataArray: numpy array [time in secs, omega, alpha]
     :param imuData: list of Imu Measurements
     :param parsed:
-    :param windowDuration: duration of the window for computing running averages.
-    :param omegaTol: In the running average array of norms of omega, if the average norm at the image timestamp is
+    :param windowDuration: duration of the window for computing running variances.
+    :param omegaTol: In the running variance array of omega, if the variance at the image timestamp is
         smaller than parsed.max_omega and is within tol of the minimum in the sliding window, then the frame will be
         chosen as a static frame. The larger tol is, the more frames will be selected.
     :return:
@@ -287,17 +287,19 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windo
     imuInterval = np.mean(np.diff(predictedImuDataArray[:, 0]))
     rate = 1.0 / imuInterval
     halfWindow = int(windowDuration * rate / 2)
+
+    # compute IMU variances
     print('IMU average rate {}, running window of samples {}'.format(rate, halfWindow * 2))
 
-    averagePredictedImu = np.zeros((predictedImuDataArray.shape[0], 3))
+    varPredictedImu = np.zeros((predictedImuDataArray.shape[0], 3))
     for index, row in enumerate(predictedImuDataArray):
-        averagePredictedImu[index, 0] = row[0]
+        varPredictedImu[index, 0] = row[0]
         startIndex = max(index - halfWindow, 0)
         finishIndex = min(index + halfWindow, predictedImuDataArray.shape[0])
-        averagePredictedImu[index, 1] = np.mean(np.linalg.norm(predictedImuDataArray[startIndex : finishIndex, 1:4], axis=1))
-        averagePredictedImu[index, 2] = np.mean(np.linalg.norm(predictedImuDataArray[startIndex : finishIndex, 4:7], axis=1))
+        varPredictedImu[index, 1] = np.sum(np.var(predictedImuDataArray[startIndex : finishIndex, 1:4], axis=0))
+        varPredictedImu[index, 2] = np.sum(np.var(predictedImuDataArray[startIndex : finishIndex, 4:7], axis=0))
 
-    averageImu = np.zeros((len(imuData), 3))
+    varImu = np.zeros((len(imuData), 3))  # each row: time, running gyro variance, running accelerometer variance
     imuDataArray = np.zeros((len(imuData), 7))
     for index, data in enumerate(imuData):
         imuDataArray[index, 0] = data.stamp.toSec()
@@ -305,11 +307,11 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windo
         imuDataArray[index, 4:7] = data.alpha
 
     for index, row in enumerate(imuDataArray):
-        averageImu[index, 0] = row[0]
+        varImu[index, 0] = row[0]
         startIndex = max(index - halfWindow, 0)
         finishIndex = min(index + halfWindow, imuDataArray.shape[0])
-        averageImu[index, 1] = np.mean(np.linalg.norm(imuDataArray[startIndex : finishIndex, 1:4], axis=1))
-        averageImu[index, 2] = np.mean(np.linalg.norm(imuDataArray[startIndex : finishIndex, 4:7], axis=1))
+        varImu[index, 1] = np.sum(np.var(imuDataArray[startIndex : finishIndex, 1:4], axis=0))
+        varImu[index, 2] = np.sum(np.var(imuDataArray[startIndex : finishIndex, 4:7], axis=0))
 
     bag = rosbag.Bag(outputBag, 'w')
     predictedImuIndex = 0
@@ -326,23 +328,23 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windo
             syncedTime = data.header.stamp.secs + data.header.stamp.nsecs * 1e-9
         syncedTime += baseCamera.timeshiftCamToImuPrior
 
-        while predictedImuIndex < averagePredictedImu.shape[0] and averagePredictedImu[predictedImuIndex][0] < syncedTime:
+        while predictedImuIndex < varPredictedImu.shape[0] and varPredictedImu[predictedImuIndex][0] < syncedTime:
             predictedImuIndex += 1
-        if predictedImuIndex == averagePredictedImu.shape[0]:
+        if predictedImuIndex == varPredictedImu.shape[0]:
             print("Break after reaching the end of IMU data computed from camera images!")
             break
 
         atPredictedImuMinimum = False
-        if averagePredictedImu[predictedImuIndex, 1] < parsed.max_omega:
-            atPredictedImuMinimum = atArrayMinimum(averagePredictedImu, 1, predictedImuIndex - 1, halfWindow, omegaTol) or \
-                                    atArrayMinimum(averagePredictedImu, 1, predictedImuIndex, halfWindow, omegaTol)
+        if varPredictedImu[predictedImuIndex, 1] < parsed.max_omega:
+            atPredictedImuMinimum = atArrayMinimum(varPredictedImu, 1, predictedImuIndex - 1, halfWindow, varOmegaTol) or \
+                                    atArrayMinimum(varPredictedImu, 1, predictedImuIndex, halfWindow, varOmegaTol)
 
-        while averageImu[imuIndex][0] < syncedTime:
+        while varImu[imuIndex][0] < syncedTime:
             imuIndex += 1
         atImuMinimum = False
-        if averageImu[imuIndex, 1] < parsed.max_omega and abs(averageImu[imuIndex, 2] - gravity) < parsed.max_accel:
-            atImuMinimum = atArrayMinimum(averageImu, 1, imuIndex - 1, halfWindow, omegaTol) or \
-                           atArrayMinimum(averageImu, 1, imuIndex, halfWindow, omegaTol)
+        if varImu[imuIndex, 1] < parsed.max_omega and varImu[imuIndex, 2] < parsed.max_accel:
+            atImuMinimum = atArrayMinimum(varImu, 1, imuIndex - 1, halfWindow, varOmegaTol) or \
+                           atArrayMinimum(varImu, 1, imuIndex, halfWindow, varOmegaTol)
         if atImuMinimum:
             saveFrame = True
             if lastFrameSyncedTime != 0:
@@ -376,10 +378,9 @@ def main():
     parsed.perform_synchronization = True
     baseCamera, predictedImuData, imuData = fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated")
 
-    windowDuration = 0.36
-    omegaTol = 0.01
-
-    selectStaticFrames(baseCamera, predictedImuData, imuData, parsed, windowDuration, omegaTol)
+    window = 1.0
+    varOmegaTol = 0.1
+    selectStaticFrames(baseCamera, predictedImuData, imuData, parsed, window, varOmegaTol)
 
 
 if __name__ == '__main__':

@@ -15,8 +15,8 @@ def identifyImuNoiseAndKnotSpacing(imu_t, imu_gyro, imu_acc):
     """
 
     min_dt = 0.01  # Don't go lower than this
-    q_gyro = 0.99
-    q_acc = 0.99
+    q_gyro = 0.992
+    q_acc = 0.992
     verbose=False
 
     sew_opts = dict(min_dt=min_dt, verbose=verbose)
