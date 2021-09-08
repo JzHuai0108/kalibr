@@ -280,6 +280,9 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windo
     :return:
     """
     outputBag = parsed.output_bag
+    syncedImageLog = os.path.join(os.path.dir(parsed.outputBag), "selected_frame_imu_time.log")
+    syncedTimeStream = open(syncedImageLog, 'w')
+
     imageDatasetReader = baseCamera.dataset
     imageTimes = [obs.time().toSec() for obs in baseCamera.targetObservations]
     imageInterval = np.median(np.diff(imageTimes))
@@ -353,8 +356,9 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed, windo
             if saveFrame:
                 bag.write(topic, data, stamp)
                 lastFrameSyncedTime = syncedTime
-                imageCount += 1
                 print("Saved frame at {}.".format(syncedTime))
+                syncedTimeStream.write('{} {:.9f}'.format(imageCount, syncedTime))
+                imageCount += 1
 
     print('Saved {} static frames out of {} frames!'.format(imageCount, len(imageDatasetReader.indices)))
     bag.close()
@@ -376,6 +380,7 @@ def main():
     fakeImuYaml(imu_yaml)
     parsed.bagfile = [parsed.bagfile]
     parsed.perform_synchronization = True
+    parsed.constant_bias = True
     baseCamera, predictedImuData, imuData = fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated")
 
     window = 1.0

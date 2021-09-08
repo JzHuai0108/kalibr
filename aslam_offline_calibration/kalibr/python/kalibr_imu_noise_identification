@@ -65,17 +65,17 @@ def loadImuData(path, topic, from_to=None, perform_synchronization=False):
 def saveCameraNoise(camNoiseList, camChainYaml):
     """
 
-    :param camNoiseList: image noise for every camera, each element is a float number in pixels.
+    :param camNoiseList: image noise for every camera, each element is a dict.
     :param camChainYaml:
     :return:
     """
     lines = loadText(camChainYaml)
-    for camId, noise in enumerate(camNoiseList):
+    for camId, noiseDict in enumerate(camNoiseList):
         occurrence = 0
         for lid, line in enumerate(lines):
             if "image_noise_std_dev" in line:
                 if occurrence == camId:
-                    lines[lid] = "  image_noise_std_dev: {}\n".format(noise)
+                    lines[lid] = "  image_noise_std_dev: {}\n".format(noiseDict["image_noise_std_dev"])
                     break
                 occurrence += 1
     dumpText(lines, camChainYaml)
@@ -106,7 +106,8 @@ def saveImuNoise(imuNoiseList, imuYamlList):
 def logCameraNoise(camNoises, logstream):
     for id, noise in enumerate(camNoises):
         logstream.write("# Camera {}\n".format(id))
-        logstream.write("image_noise_std_dev: {} # px\n".format(id, noise))
+        for key, val in noise.iteritems():
+            logstream.write("{}: {} # px \n".format(key, val))
 
 
 def logImuNoise(imuNoiseList, logstream):
@@ -161,10 +162,11 @@ def main():
     logstream.write("# Pose knots per second: {}".format(args.pose_knots_per_second))
 
     # write noise to yamls which will be read by calibrate_imu_camera()
-    saveCameraNoise([image_noise_std_dev] * 4, args.chain_yaml)  # supports 4 cameras at most.
+    camNoiseList = [{"image_noise_std_dev" : image_noise_std_dev}] * 4  # supports 4 cameras at most.
+    saveCameraNoise(camNoiseList, args.chain_yaml)
     saveImuNoise(imuNoiseList, args.imu_yamls)
     logstream.write("# Initialization\n")
-    logCameraNoise([image_noise_std_dev]*4, logstream)
+    logCameraNoise(camNoiseList, logstream)
     logImuNoise(imuNoiseList, logstream)
 
 
@@ -180,10 +182,16 @@ def main():
         for camId in range(len(residualStats) - 2):
             camName = 'cam{}'.format(camId)
             if camName in residualStats:
+                camNoise = {}
                 data = residualStats[camName]
                 print('\nCamera {} noises:'.format(camId))
-                print('\timage_noise_std_dev: {}'.format(data["image_noise_std_dev"]))
-                camNoiseList.append(np.average(data["image_noise_std_dev"]))
+                for key, val in data.iteritems():
+                    print('\t{}: {}'.format(key, val))
+                    if key == "image_noise_std_dev":
+                        camNoise[key] = np.average(val)
+                    else:
+                        camNoise[key] = val
+                camNoiseList.append(camNoise)
         saveCameraNoise(camNoiseList, args.chain_yaml)
         logstream.write("\n# Iteration {}\n".format(outerLoopId))
         logCameraNoise(camNoiseList, logstream)
@@ -204,6 +212,10 @@ def main():
                     if noise in data:
                         print('\t{}: {}'.format(noise, data[noise]))
                         imuNoise[noise] = np.average(data[noise][2, 1:])
+                for noise in ["accelerometer_noise_cov", "gyroscope_noise_cov"]:
+                    if noise in data:
+                        print('\t{}: {}'.format(noise, data[noise]))
+                        imuNoise[noise] = data[noise]
                 imuNoiseList.append(imuNoise)
         saveImuNoise(imuNoiseList, args.imu_yamls)
         logImuNoise(imuNoiseList, logstream)

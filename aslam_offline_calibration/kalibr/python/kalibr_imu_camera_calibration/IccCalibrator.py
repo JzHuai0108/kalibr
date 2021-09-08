@@ -298,12 +298,15 @@ class IccCalibrator(object):
             if len(cam.allReprojectionErrors)>0:
                 rawErrors = np.array([rerr.error() for reprojectionErrors in cam.allReprojectionErrors 
                         for rerr in reprojectionErrors])
+
                 camNoise = np.std(rawErrors, 0, ddof=1)
                 camName = 'cam{}'.format(cidx)
                 stats[camName] = dict()
                 stats[camName]['image_noise_std_dev'] = camNoise
-                print("Reprojection error (cam{0}) [px]: mean {1}, median {2}, std: {3}".format(
-                        cidx, np.mean(rawErrors, 0), np.median(rawErrors, 0), camNoise))                
+                cov = np.matmul(rawErrors.transpose(), rawErrors) / rawErrors.shape[0]
+                stats[camName]['image_noise_cov'] = cov
+                print("Reprojection error (cam{0}) [px]: mean {1}, median {2}, std: {3}, cov: {4}".format(
+                        cidx, np.mean(rawErrors, 0), np.median(rawErrors, 0), camNoise, cov))
             else:
                 print("Reprojection error (cam{0}) [px]:     no corners".format(cidx))
 
@@ -326,6 +329,11 @@ class IccCalibrator(object):
             stats[imuName] = dict()
             stats[imuName]["accelerometer_noise_density"] = accelNoiseDiscrete * rootdt
             stats[imuName]["gyroscope_noise_density"] = gyroNoiseDiscrete * rootdt
+
+            accelNoiseCovDiscrete = np.matmul(eAccel.transpose(), eAccel) / eAccel.shape[0]
+            gyroNoiseCovDiscrete = np.matmul(eGyro.transpose(), eGyro) / eGyro.shape[0]
+            stats[imuName]["accelerometer_noise_cov"] = accelNoiseCovDiscrete / f
+            stats[imuName]["gyroscope_noise_cov"] = gyroNoiseCovDiscrete / f
 
             # compute bias random walk stats by sampling the bias splines
             padding = 1.0 # remove padding from both ends to avert ripple effect.
