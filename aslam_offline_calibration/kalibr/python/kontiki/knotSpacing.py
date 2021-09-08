@@ -14,12 +14,13 @@ def identifyImuNoiseAndKnotSpacing(imu_t, imu_gyro, imu_acc):
         optimal knot placing per accel data.
     """
 
-    min_dt = 0.01  # Don't go lower than this
+    min_dt = 1.0 / 200  # Don't go lower than this
+    max_dt = 1.0 / 40
     q_gyro = 0.992
     q_acc = 0.992
     verbose=False
 
-    sew_opts = dict(min_dt=min_dt, verbose=verbose)
+    sew_opts = dict(min_dt=min_dt, max_dt=max_dt, verbose=verbose)
     def removeBias(data):
         mean = data.mean(axis=1)
         data = data - mean[:, np.newaxis]
