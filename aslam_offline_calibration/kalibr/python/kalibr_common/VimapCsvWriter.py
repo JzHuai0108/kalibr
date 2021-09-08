@@ -56,6 +56,19 @@ def acvTimeToNanosecondString(acvTime):
     return "{}{:09d}".format(acvTime.sec, acvTime.nsec)
 
 
+def writeOpenCVYaml(initialParameters, yamlFile):
+    """
+    write the params in initialParameters to a yaml in opencv format
+    TODO(binliang)
+    :param initialParameters:
+    :return:
+    """
+    with open(yamlFile, 'w') as stream:
+        for key, val in initialParameters.iteritems():
+            print("{}: {}".format(key, val))
+            stream.write("{}: {}\n".format(key, val))
+
+
 def saveVimap(cself, outputDir):
     """save extracted image keypoints and IMU data in maplab csv format"""
     vertexCsv = os.path.join(outputDir, "vertices.csv")
@@ -92,9 +105,11 @@ def saveVimap(cself, outputDir):
         timeShiftPrior = float(camera.timeshiftCamToImuPrior)
         camName = "cam{}".format(camNr)
         initialParameters.data[camName] = dict()
-        initialParameters.data[camName]["T_imu_cam"] = T_b_c.T().tolist()
+        initialParameters.data[camName]["T_imu_cam"] = T_b_c.T()
         initialParameters.data[camName]["timeshift_cam_imu"] = timeShiftPrior
-    initialParameters.writeYaml()
+    initialParameters.data["gravity_in_target"] = cself.CameraChain.getEstimatedGravity().tolist()
+    # initialParameters.writeYaml()
+    writeOpenCVYaml(initialParameters.data, yamlFile)
 
     landmarks = cself.CameraChain.camList[0].detector.target().points()
 
