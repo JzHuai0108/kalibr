@@ -59,14 +59,38 @@ def acvTimeToNanosecondString(acvTime):
 def writeOpenCVYaml(initialParameters, yamlFile):
     """
     write the params in initialParameters to a yaml in opencv format
-    TODO(binliang)
-    :param initialParameters:
-    :return:
     """
     with open(yamlFile, 'w') as stream:
+        stream.write("%YAML:1.0\n")
         for key, val in initialParameters.iteritems():
-            print("{}: {}".format(key, val))
-            stream.write("{}: {}\n".format(key, val))
+            if key.startswith("cam"):
+                stream.write("{}:\n".format(key))
+                for key_c, val_c in val.iteritems():
+                    if key_c == "T_imu_cam":
+                        stream.write("  T_imu_cam: !!opencv-matrix\n")
+                        stream.write("    cols: {}\n".format(val_c.shape[1]))
+                        stream.write("    rows: {}\n".format(val_c.shape[0]))
+                        stream.write("    dt: d\n")
+                        stream.write("    data: [")
+                        for i in range(val_c.shape[0]):
+                            for j in range(val_c.shape[1]):
+                                if i == val_c.shape[0] - 1 and j == val_c.shape[1] - 1:
+                                    stream.write("{}".format(val_c[i][j]))
+                                else:
+                                    stream.write("{}, ".format(val_c[i][j]))
+                            if i < val_c.shape[0] - 1:
+                                stream.write("\n           ")
+                            else:
+                                stream.write("]\n")
+                    else:
+                        stream.write("  {}: {}\n".format(key_c, val_c))
+            else:
+                stream.write("{}: [".format(key))
+                for i in range(len(val)):
+                    if i == len(val) - 1:
+                        stream.write("{}]\n".format(val[i]))
+                    else:
+                        stream.write("{}, ".format(val[i]))
 
 
 def saveVimap(cself, outputDir):
