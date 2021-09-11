@@ -79,11 +79,11 @@ class BagImageDatasetReader(object):
     timestamps = list()
     for idx in self.indices:
       topic, data, stamp = self.bag._read_message(self.index[idx].position)
-      timestamp = data.header.stamp.secs + data.header.stamp.nsecs / 1.0e9
+      timestamp = stamp.secs + stamp.nsecs / 1.0e9
       timestamps.append(timestamp)
 
-    bagstart = min(timestamps)
-    baglength = max(timestamps) - bagstart
+    bagstart = self.bag.get_start_time()
+    baglength = self.bag.get_end_time() - bagstart
 
     # some value checking
     if bag_from_to[0] >= bag_from_to[1]:
