@@ -362,6 +362,7 @@ class RsCalibrator(object):
             if tk > poseSpline.t_min() and tk < poseSpline.t_max():
                 a_w.append(np.dot(poseSpline.orientation(tk), np.dot(R_i_c, - im.alpha)))
         mean_a_w = np.mean(np.asarray(a_w).T, axis=1)
+        # A rough gravity magnitude is OK for RS camera calibration with loose IMU constraints.
         gravity_w = mean_a_w / np.linalg.norm(mean_a_w) * 9.80655
         print("Gravity was intialized to {} [m/s^2]".format(gravity_w))
 

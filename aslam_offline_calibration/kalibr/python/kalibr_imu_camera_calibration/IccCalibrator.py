@@ -240,6 +240,7 @@ class IccCalibrator(object):
         imuSetConfig = kc.ImuSetParameters(resultFile, True)
         for imu in self.ImuList:
             imuConfig = imu.getImuConfig()
+            imuConfig.setGravityInTarget(self.gravityDv.toEuclidean())
             imuSetConfig.addImuParameters(imu_parameters=imuConfig)
         imuSetConfig.writeYaml(resultFile)
 

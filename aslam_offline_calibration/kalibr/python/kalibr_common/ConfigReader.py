@@ -581,7 +581,7 @@ class ImuParameters(ParametersBase):
 
     def setGravityInTarget(self, gravityInTarget):
         self.checkGravity(gravityInTarget)
-        self.data["gravity_in_target"] = gravityInTarget
+        self.data["gravity_in_target"] = gravityInTarget.tolist()
 
     #accelerometer statistics
     def checkAccelerometerStatistics(self, noise_density, random_walk):

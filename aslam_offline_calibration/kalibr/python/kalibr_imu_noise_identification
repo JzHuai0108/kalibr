@@ -93,7 +93,8 @@ def saveImuNoise(imuNoiseList, imuYamlList):
         for lid, line in enumerate(lines):
             for noise in ["accelerometer_noise_density", "gyroscope_noise_density"]:
                 if noise in line:
-                    lines[lid] = "{}: {}\n".format(noise, imuNoiseList[imuId][noise])
+                    lead = line[:(line.find(noise) + len(noise))]  # This keeps the padding spaces which is needed for yaml.
+                    lines[lid] = "{}: {}\n".format(lead, imuNoiseList[imuId][noise])
                     break
             # We should not update random walk parameters.
             # for noise in ["accelerometer_random_walk", "gyroscope_random_walk"]:
@@ -184,7 +185,7 @@ def main():
             if camName in residualStats:
                 camNoise = {}
                 data = residualStats[camName]
-                print('\nCamera {} noises:'.format(camId))
+                print('Camera {} noises:'.format(camId))
                 for key, val in data.iteritems():
                     print('\t{}: {}'.format(key, val))
                     if key == "image_noise_std_dev":
@@ -201,7 +202,7 @@ def main():
             imuName = 'imu{}'.format(imuId)
             if imuName in residualStats:
                 data = residualStats[imuName]
-                print('\nIMU {} noises:'.format(imuId))
+                print('IMU {} noises:'.format(imuId))
 
                 imuNoise = {}
                 for noise in ["accelerometer_noise_density", "gyroscope_noise_density"]:

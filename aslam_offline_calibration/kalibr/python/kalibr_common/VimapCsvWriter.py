@@ -94,7 +94,10 @@ def writeOpenCVYaml(initialParameters, yamlFile):
 
 
 def saveVimap(cself, outputDir):
-    """save extracted image keypoints and IMU data in maplab csv format"""
+    """save extracted image keypoints and IMU data in maplab csv format
+    If bag_from_to is provided to the entry program, this will only save the data within that interval.
+    If perform_synchronization is provided to the entry program, this will save synced local times for cameras and IMUs.
+    """
     vertexCsv = os.path.join(outputDir, "vertices.csv")
     # create a vertex for every image of camera 0.
     numFrames = len(cself.CameraChain.camList[0].targetObservations)
@@ -175,13 +178,13 @@ def saveVimap(cself, outputDir):
         stream.write('{}\n'.format(header))
         for index, row in enumerate(landmarks):
             stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
-
-    imuCsv = os.path.join(outputDir, "imu.csv")
-    with open(imuCsv, "w") as stream:
-        header = ', '.join(["timestamp [ns]", "acc x [m/s^2]", "acc y [m/s^2]", "acc z [m/s^2]",
-                            "gyro x [rad/s]", "gyro y [rad/s]", "gyro z [rad/s]"])
-        stream.write('{}\n'.format(header))
-        for time, omega, alpha in cself.ImuList[0].dataset:
-            alphaString = ', '.join(map(str, alpha))
-            omegaString = ', '.join(map(str, omega))
-            stream.write("{}, {}, {}\n".format(acvTimeToNanosecondString(time), alphaString, omegaString))
+    for index, imu in enumerate(cself.ImuList):
+        imuCsv = os.path.join(outputDir, "imu{}.csv".format(index))
+        with open(imuCsv, "w") as stream:
+            header = ', '.join(["timestamp [ns]", "acc x [m/s^2]", "acc y [m/s^2]", "acc z [m/s^2]",
+                                "gyro x [rad/s]", "gyro y [rad/s]", "gyro z [rad/s]"])
+            stream.write('{}\n'.format(header))
+            for time, omega, alpha in imu.dataset:
+                alphaString = ', '.join(map(str, alpha))
+                omegaString = ', '.join(map(str, omega))
+                stream.write("{}, {}, {}\n".format(acvTimeToNanosecondString(time), alphaString, omegaString))

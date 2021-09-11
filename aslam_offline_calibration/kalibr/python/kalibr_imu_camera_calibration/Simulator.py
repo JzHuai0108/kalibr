@@ -486,9 +486,8 @@ class RsCameraImuSimulator(RsCameraSimulator):
         q_i_b_Dv = aopt.RotationQuaternionDv(q_i_b_prior)
         r_b_Dv = aopt.EuclideanPointDv(np.array([0., 0., 0.]))
 
-        # gravity in target example: np.array([0.0, 9.81, 0.0])
         gravity = self.imuConfig.getGravityInTarget()
-        gravityDv = aopt.EuclideanDirection(np.array(self.imuConfig.getGravityInTarget()).T)
+        gravityDv = aopt.EuclideanDirection(np.array(gravity))
         gravityExpression = gravityDv.toExpression()
 
         omegaDummy = np.zeros((3, 1))
