@@ -1297,7 +1297,7 @@ class IccScaledMisalignedImu(IccImu):
             if tk > poseSplineDv.spline().t_min() and tk < poseSplineDv.spline().t_max():
                 C_b_w = poseSplineDv.orientation(tk).inverse()
                 a_w = poseSplineDv.linearAcceleration(tk)
-                b_i = self.accelBiasExpression(tk)
+                b_i = self.accelerometerBiasExpression(tk)
                 M = self.M_accel_Dv.toExpression()
                 w_b = poseSplineDv.angularVelocityBodyFrame(tk)
                 w_dot_b = poseSplineDv.angularAccelerationBodyFrame(tk)
