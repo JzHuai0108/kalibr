@@ -85,9 +85,9 @@ namespace aslam {
                       
           // this is an error...
           SM_WARN("BSplineMotionError<SPLINE_T>::evaluateJacobiansImplementation is currently void");
-          
+          // TODO(jhuai): This can be implemented similarly to MarginalizationPriorErrorTerm which is done with SVD.
+          // It can be tested against buildHessianImplementation.
         }
-          
           
           
         template<class SPLINE_T>

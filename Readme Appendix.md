@@ -162,3 +162,9 @@ These errors depend on the camera parameters which may be optimized in the kalib
 
 regularizer: asp.BSplineMotionError of aslam_nonparametric_estimation/aslam_splines/include/aslam/backend.
 ```
+
+## TODO
+Merge the uniform or nonuniform BSplines on differential manifold developed by Hannes Sommer in aslam_bsplines, see asl hand_eye_calibration.
+Use efficient derivation recursive computation approach to compute the derivatives for these diffManifoldBSplines, see Basalt.
+
+
