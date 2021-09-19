@@ -129,11 +129,11 @@ namespace sm {
       return (*this);
     }
 
-    Id& operator= (const Id& other)
-    {
-      _id = other._id;
-      return *this;
-    }
+    // Id& operator= (const Id& other)
+    // {
+    //   _id = other._id;
+    //   return *this;
+    // }
 
     bool isSet() const
     {

@@ -24,7 +24,7 @@ namespace aslam {
       _spline(spline)
     {
       SM_ASSERT_TRUE(Exception, frame != NULL, "The frame must not be null");
-      SM_ASSERT_TRUE(Exception, _frame->numKeypoints() > _keypointIndex, "Keypoint index must be in bounds of frame.");
+      SM_ASSERT_TRUE(Exception, (int)_frame->numKeypoints() > _keypointIndex, "Keypoint index must be in bounds of frame.");
 
       // if a spline is given, estimate the covariance in each iteration
       //if(!spline)
@@ -46,7 +46,7 @@ namespace aslam {
     template<typename F>
     Eigen::MatrixXd CovarianceReprojectionError<F>::covarianceMap() {
 
-    	const keypoint_t & k = _frame->keypoint(_keypointIndex);
+    	// const keypoint_t & k = _frame->keypoint(_keypointIndex);
     	const camera_geometry_t & cam = _frame->geometry();
 
     	Eigen::Vector4d p = _point.toHomogeneous();

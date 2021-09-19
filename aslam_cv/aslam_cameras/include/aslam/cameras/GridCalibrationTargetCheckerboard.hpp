@@ -28,8 +28,8 @@ class GridCalibrationTargetCheckerboard : public GridCalibrationTargetBase {
       performFastCheck(true),
       filterQuads(false),
       doSubpixelRefinement(true),
-      showExtractionVideo(false),
-      windowWidth(11) {};
+      windowWidth(11),
+      showExtractionVideo(false) {};
 
     /// \brief opencv options
     bool useAdaptiveThreshold;

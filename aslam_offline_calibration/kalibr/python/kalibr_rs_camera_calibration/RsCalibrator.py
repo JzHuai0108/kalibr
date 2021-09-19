@@ -15,9 +15,9 @@ import multiprocessing
 import sys
 import gc
 import math
-from ReprojectionErrorKnotSequenceUpdateStrategy import *
-from RsPlot import plotSpline
-from RsPlot import plotSplineValues
+from .ReprojectionErrorKnotSequenceUpdateStrategy import *
+from .RsPlot import plotSpline
+from .RsPlot import plotSplineValues
 import pylab as pl
 import pdb
 from kalibr_imu_camera_calibration import BSplineIO
@@ -244,7 +244,7 @@ class RsCalibrator(object):
             padding = 2
             samplePoseTimes = np.arange(bspline.t_min() + padding, bspline.t_max() - padding, interval)
             refPoseStream = open("sampled_poses.txt", 'w')
-            print >> refPoseStream, "%poses {} Hz from the RS calibrator B-splines: time (sec), T_w_c (txyz, qxyzw).".format(rate)
+            print("%poses {} Hz from the RS calibrator B-splines: time (sec), T_w_c (txyz, qxyzw).".format(rate), file=refPoseStream)
             BSplineIO.sampleAndSaveBSplinePoses(samplePoseTimes, self.__poseSpline_dv, stream=refPoseStream)
             refPoseStream.close()
 
@@ -321,8 +321,8 @@ class RsCalibrator(object):
         else:
             knots = int(round(seconds * framerate/3))
 
-        print
-        print "Initializing a pose spline with %d knots (%f knots per second over %f seconds)" % ( knots, knots/seconds, seconds)
+        print()
+        print("Initializing a pose spline with %d knots (%f knots per second over %f seconds)" % ( knots, knots/seconds, seconds))
         poseSpline.initPoseSplineSparse(times, curve, knots, 1e-4)
         return poseSpline
 
@@ -637,7 +637,7 @@ class RsCalibrator(object):
     def __runOptimization(self, problem ,deltaJ, deltaX, maxIt):
         """Run the given optimization problem problem"""
 
-        print "run new optimisation with initial values:"
+        print("run new optimisation with initial values:")
         self.__printResults()
 
         # verbose and choldmod solving with schur complement trick
@@ -700,7 +700,7 @@ class RsCalibrator(object):
         proj = self.__camera_dv.projectionDesignVariable().value()
         dist = self.__camera_dv.distortionDesignVariable().value()
         dt = self.cameraTimeToImuTimeDv.toScalar()
-        print('\n')
+        print()
         if not self.__std_camera:
             if (self.__isRollingShutter()):
                 print("LineDelay: {}".format(shutter.lineDelay()))

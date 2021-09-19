@@ -208,7 +208,7 @@ class RsCameraSimulator(object):
         """
         imageCornerProjected= list()
         if verbose:
-            print 'Naive method for state time %.9f' % state_time
+            print('Naive method for state time %.9f' % state_time)
         for iota in range(self.targetObservation.getTotalTargetPoint()):
             # get the initial observation
             sm_T_w_c, validPose = getCameraPoseAt(state_time, self.poseSplineDv, T_imu_cam)
@@ -220,7 +220,7 @@ class RsCameraSimulator(object):
             numIter = 0
             aborted = False
             if verbose:
-                print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T
+                print('lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T)
             if np.absolute(line_delay) < 1e-8:
                 imageCornerProjected.append(lastImagePoint)
                 continue
@@ -234,7 +234,7 @@ class RsCameraSimulator(object):
                 delta = np.absolute(lastImagePoint[1,0] - imagePoint[1,0])
                 numIter += 1
                 if verbose:
-                    print 'lmId', iota, 'iter', numIter, 'image coords', imagePoint.T
+                    print('lmId', iota, 'iter', numIter, 'image coords', imagePoint.T)
                 lastImagePoint = imagePoint
                 if delta < 1e-3:
                     break

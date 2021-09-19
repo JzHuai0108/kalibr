@@ -1776,8 +1776,8 @@ Eigen::MatrixXd BSpline::segmentIntegral(int segmentIdx, const Eigen::MatrixXd &
       for(size_t jack=0; jack<knots_.size(); ++jack)
         kcs<< knots_[jack]<<std::endl;
       kcs<< std::fixed << std::setprecision(12);
-      for(size_t jack=0; jack<coefficients_.cols(); ++jack){
-        size_t kite=0;
+      for(int jack=0; jack<coefficients_.cols(); ++jack){
+        int kite=0;
         for(; kite<coefficients_.rows()-1; ++kite)
           kcs<<coefficients_(kite,jack)<<" ";
         kcs<<coefficients_(kite,jack)<<std::endl;       
@@ -1808,8 +1808,8 @@ Eigen::MatrixXd BSpline::segmentIntegral(int segmentIdx, const Eigen::MatrixXd &
       for(size_t jack=0; jack<knots.size(); ++jack)
         ifs >> knots[jack];
       
-      for(size_t jack=0; jack<coefficients.cols(); ++jack){        
-        for(size_t kite=0; kite<coefficients.rows(); ++kite)
+      for(int jack=0; jack<coefficients.cols(); ++jack){        
+        for(int kite=0; kite<coefficients.rows(); ++kite)
           ifs>>coefficients(kite,jack);          
       }
       ifs.close(); 

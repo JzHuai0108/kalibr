@@ -163,8 +163,8 @@ void marginalize(
 //			  SM_ASSERT_TRUE_DBG(aslam::Exception, rankDeficient || (numRowsToKeep == dimOfRemainingDesignVariables), "must be the same if full rank!");
 
 			  // get the top left block
-			  SM_ASSERT_GE(aslam::Exception, R.rows(), numTopRowsInCov, "Cannot extract " << numTopRowsInCov << " rows of R because it only has " << R.rows() << " rows.");
-			  SM_ASSERT_GE(aslam::Exception, R.cols(), numTopRowsInCov, "Cannot extract " << numTopRowsInCov << " cols of R because it only has " << R.cols() << " cols.");
+			  SM_ASSERT_GE(aslam::Exception, R.rows(), (int)numTopRowsInCov, "Cannot extract " << numTopRowsInCov << " rows of R because it only has " << R.rows() << " rows.");
+			  SM_ASSERT_GE(aslam::Exception, R.cols(), (int)numTopRowsInCov, "Cannot extract " << numTopRowsInCov << " cols of R because it only has " << R.cols() << " cols.");
 			  //outRtop = R.block(0, 0, numTopRowsInRtop, numTopRowsInRtop);
 
               // cut off the zero rows at the bottom
