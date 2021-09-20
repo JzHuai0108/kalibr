@@ -719,7 +719,7 @@ class RsCalibrator(object):
 
     def __saveParametersYaml(self):
         # Create new config file
-        bagtag = self.__cameraGeometry.dataset.bagfile.translate(None, "<>:/\|?*").replace('.bag', '', 1)
+        bagtag = self.__cameraGeometry.dataset.bagfile.translate({ord(c):None for c in "<>:/\|?*"}).replace('.bag', '', 1)
         resultFile = "camchain-" + bagtag + ".yaml"
         chain = cr.CameraChainParameters(resultFile, createYaml=True)
         camParams = cr.CameraParameters(resultFile, createYaml=True)
