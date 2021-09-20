@@ -1,7 +1,7 @@
 import os
 import sm
-import VimapCsvReader
-import VimapCsvWriter
+from . import VimapCsvReader, FrameObservation
+from . import VimapCsvWriter
 
 vimapFolder = ""
 
@@ -53,7 +53,7 @@ def testRemoveElements():
 
 
 def testFrameObservation():
-    print("sentinel {}".format(VimapCsvReader.FrameObservation.landmarkSentinel()))
+    print("sentinel {}".format(FrameObservation.landmarkSentinel()))
 
 
 def testVimapCsvReader():

@@ -110,11 +110,8 @@ class IccCalibrator(object):
         print("\tTime offset padding: %f" % (timeOffsetPadding))
 
         for id, cam in enumerate(self.CameraChain.camList):
-            print("\tCamera {} use rolling shutter model? {}, line delay {} (sec).".format(
+            print("\tCamera {} uses rolling shutter model? {}, line delay {} (sec).".format(
                 id, cam.isRollingShutter(), cam.getLineDelaySeconds()))
-            cam.generateIntrinsicsInitialGuess(self.__config.estimateParameters['intrinsics'],
-                                               self.__config.estimateParameters['distortion'],
-                                               self.__config.estimateParameters['shutter'])
             cam.computeCameraPoses()
 
         ############################################

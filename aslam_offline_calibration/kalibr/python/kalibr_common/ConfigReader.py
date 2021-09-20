@@ -1,6 +1,5 @@
 import yaml
 import sys
-import warnings
 import numpy as np
 import functools
 
@@ -213,18 +212,9 @@ class AslamCamera(object):
         camera_model, intrinsics = params.getIntrinsics()
         dist_model, dist_coeff = params.getDistortion()
         resolution = params.getResolution()
-        try:
-            lineDelayNanos = params.getLineDelayNanos()
-        except RuntimeError as e:
-            msg = str(e)
-            if 'missing' in msg:
-                lineDelayNanos = 0
-            else:
-                raise e
-        except:
-            raise
+        lineDelayNanos = params.getLineDelayNanos()
         return AslamCamera(camera_model, intrinsics, dist_model, dist_coeff, resolution, lineDelayNanos)
-        
+
 
 #wrapper to ctach all KeyError exception (field missing in yaml ...)
 def catch_keyerror(f):
@@ -436,8 +426,8 @@ class CameraParameters(ParametersBase):
             return self.data["line_delay_nanoseconds"]
         else:
             defaultLineDelay = 0
-            warnings.warn("Warn: \"line_delay_nanoseconds\" is not found in {},"
-                          " will default to {}.".format(self.yamlFile, defaultLineDelay))
+            sm.logWarn("\"line_delay_nanoseconds\" is not found in {},"
+                       " will default to {}.".format(self.yamlFile, defaultLineDelay))
             return defaultLineDelay
 
     def setLineDelayNanos(self, lineDelay):
@@ -588,9 +578,9 @@ class ImuParameters(ParametersBase):
             return self.data["gravity_in_target"]
         else:
             gW = [0, 9.81, 0]
-            warnings.warn("Warn: \"gravity_in_target\" is not found in {}, "
-                          "will default to {}. Note that in kalibr "
-                          "only its magnitude matters.".format(self.yamlFile, gW))
+            sm.logWarn("\"gravity_in_target\" is not found in {}, "
+                       "will default to {}. Note that in kalibr "
+                       "only its magnitude matters.".format(self.yamlFile, gW))
             return gW
 
     def setGravityInTarget(self, gravityInTarget):
@@ -878,9 +868,14 @@ class CameraChainParameters(ParametersBase):
             if cam_id >= self.numCameras():
                 self.raiseError("out-of-range: camera id of {0}".format(cam_id))
 
-    @catch_keyerror
     def getLineDelay(self, camNr):
-        return self.data["cam{0}".format(camNr)]["line_delay_nanoseconds"]
+        if "line_delay_nanoseconds" in self.data["cam{0}".format(camNr)]:
+            return self.data["cam{0}".format(camNr)]["line_delay_nanoseconds"]
+        else:
+            defaultLineDelay = 0
+            sm.logWarn("\"line_delay_nanoseconds\" is not found in {} for camera {},"
+                       " will default to {}.".format(self.yamlFile, camNr, defaultLineDelay))
+            return defaultLineDelay
 
     def setLineDelay(self, camNr, line_delay_nanos):
         self.data["cam{0}".format(camNr)]["line_delay_nanoseconds"] = line_delay_nanos

@@ -11,7 +11,7 @@ Stop when the noise parameters or the total cost do not change much.
 """
 
 import kalibr_common as kc
-from kontiki import knotSpacing
+from kontiki import sew
 import numpy as np
 
 import os
@@ -107,14 +107,14 @@ def saveImuNoise(imuNoiseList, imuYamlList):
 def logCameraNoise(camNoises, logstream):
     for id, noise in enumerate(camNoises):
         logstream.write("# Camera {}\n".format(id))
-        for key, val in noise.iteritems():
+        for key, val in noise.items():
             logstream.write("{}: {} # px \n".format(key, val))
 
 
 def logImuNoise(imuNoiseList, logstream):
     for id, noise in enumerate(imuNoiseList):
         logstream.write("# IMU {}\n".format(id))
-        for key, val in noise.iteritems():
+        for key, val in noise.items():
             logstream.write("{}: {}\n".format(key, val))
 
 
@@ -151,7 +151,7 @@ def main():
                                                       args.bag_from_to, args.perform_synchronization)
         imu_gyro = np.transpose(gyroData)
         imu_acc = np.transpose(accelData)
-        gyroNoise, accNoise, so3_dt, r3_dt, dt = knotSpacing.identifyImuNoiseAndKnotSpacing(
+        gyroNoise, accNoise, so3_dt, r3_dt, dt = sew.identifyImuNoiseAndKnotSpacing(
             timestamps, imu_gyro, imu_acc)
         imuNoise = {"gyroscope_noise_density" : gyroNoise,
                     "accelerometer_noise_density" : accNoise}
@@ -171,7 +171,7 @@ def main():
     logImuNoise(imuNoiseList, logstream)
 
 
-    for outerLoopId in range(5):
+    for outerLoopId in range(args.max_noise_opt_iters):
         if outerLoopId == 0:
             args.saveVimap = True
         else:
@@ -186,7 +186,7 @@ def main():
                 camNoise = {}
                 data = residualStats[camName]
                 print('Camera {} noises:'.format(camId))
-                for key, val in data.iteritems():
+                for key, val in data.items():
                     print('\t{}: {}'.format(key, val))
                     if key == "image_noise_std_dev":
                         camNoise[key] = np.average(val)

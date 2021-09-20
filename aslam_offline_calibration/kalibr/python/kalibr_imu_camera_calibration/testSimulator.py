@@ -1,6 +1,6 @@
 import numpy as np
 import kalibr_common as kc
-import Simulator
+from . import Simulator
 
 
 def testAddNoise():

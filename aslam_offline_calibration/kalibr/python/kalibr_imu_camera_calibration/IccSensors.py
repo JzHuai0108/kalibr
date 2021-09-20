@@ -350,7 +350,7 @@ class IccCamera():
         self.camera.dv.setActive(
             estimateParameters['intrinsics'],
             estimateParameters['distortion'],
-            estimateParameters['shutter'])
+            self.isRollingShutter() and estimateParameters['shutter'])
         # add the camera design variables last for optimal sparsity patterns.
         problem.addDesignVariable(self.camera.dv.shutterDesignVariable(), ic.CALIBRATION_GROUP_ID)
         problem.addDesignVariable(self.camera.dv.projectionDesignVariable(), ic.CALIBRATION_GROUP_ID)
@@ -390,7 +390,10 @@ class IccCamera():
         return self.cameraTimeToImuTimeDv.toScalar() + self.timeshiftCamToImuPrior
 
     def getResultLineDelay(self):
-        return self.camera.dv.shutterDesignVariable().value().lineDelay()
+        if self.isRollingShutter():
+            return self.camera.dv.shutterDesignVariable().value().lineDelay()
+        else:
+            return 0
 
     def getResultProjection(self):
         return self.camera.dv.projectionDesignVariable().value().getParameters().flatten()
@@ -441,7 +444,7 @@ class IccCamera():
 
     def getLineDelaySeconds(self):
         if self.isRollingShutter():
-            return self.camera.geometry.shutter().getParameters()[0]
+            return self.camera.geometry.shutter().getParameters().flatten()[0]
         else:
             return 0
 
@@ -458,7 +461,7 @@ class IccCamera():
             deltaTimes = np.diff(times)
             estimatedFps = 1.0 / np.median(deltaTimes)
             self.camera.geometry.shutter().setParameters(np.array([1.0 / (estimatedFps * float(sensorRows))]))
-            print('After initializing line delay, projection, distortion, and shutter parameters {}'.format(
+            print('After initialization, line delay, projection, distortion, and shutter parameters: {}'.format(
                 self.camera.geometry.getParameters(True, True, True).T))
 
     def computeCameraPoses(self):
@@ -813,7 +816,7 @@ class IccImu(object):
     
     class ImuParameters(kc.ImuParameters):
         def __init__(self, imuConfig):
-            kc.ImuParameters.__init__(self, '', True)
+            kc.ImuParameters.__init__(self, imuConfig.yamlFile, True)
             self.data = imuConfig.data
             self.data["model"] = "calibrated"
 

@@ -19,7 +19,7 @@ Kalibr is a toolbox that solves the following calibration problems:
 
 ## Installation
 
-### [Ubuntu 18.04 and Ubuntu 20.04](https://github.com/ethz-asl/kalibr/issues/396)
+### [Ubuntu 20.04](https://github.com/ethz-asl/kalibr/issues/396)
 
 ```
 sudo apt update
@@ -55,13 +55,15 @@ We've upgraded and fixed kalibr at ORI for 20.04. Please use our fork: `git clon
 - Then install the two missing runtime dependencies: `sudo apt install python3-wxgtk4.0 python3-igraph`
 - Unittests are currently failing on 20.04 and thus deactivated on the buildserver.
 
-### Test with camera-IMU calibration sample data
+### Test with IMU-camera calibration sample data
 
 ```
 source ~/kalibr_ws/devel/setup.bash
 cd /path/to/kalibr_dynamic_sample
-rosrun kalibr kalibr_calibrate_imu_camera --target april_6x6.yaml --cam camchain.yaml --imu imu_adis16448.yaml --bag dynamic.bag --bag-from-to 5 45
+kalibr_calibrate_imu_camera --target april_6x6.yaml --cam camchain.yaml --imu imu_adis16448.yaml --bag dynamic.bag --bag-from-to 5 45
 ```
+Also refer to [test_on_dynamic_sample](ci/test_on_dynamic_sample.sh) for shell scripts on
+rolling shutter camera-IMU calibration, simulation, and noise identification.
 
 ## Tutorial: IMU-camera calibration
 A video tutorial for the IMU-camera calibration can be found here:
