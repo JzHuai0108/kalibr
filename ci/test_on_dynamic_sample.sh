@@ -14,7 +14,7 @@ datadir=$2
 outputdir=$datadir
 
 cd $kalibr_ws
-# catkin build -DCMAKE_BUILD_TYPE=Release -j4
+catkin build -DCMAKE_BUILD_TYPE=Release -j4
 source devel/setup.bash
 
 test_camera_IMU_calibration() {
@@ -133,8 +133,8 @@ echo $cmd
 $cmd
 }
 
-# test_camera_IMU_calibration
+test_camera_IMU_calibration
 
-# test_simulation
+test_simulation
 
 test_noise_identification
