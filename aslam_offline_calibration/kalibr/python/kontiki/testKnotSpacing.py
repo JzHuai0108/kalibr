@@ -2,7 +2,7 @@ import csv
 import sys
 
 import numpy as np
-import knotSpacing
+import sew
 
 
 def loadRawImuData(csvFile):
@@ -34,7 +34,7 @@ def main():
     imu_acc = np.transpose(accelData)
     imu_t = timestamps
 
-    gyroNoise, accNoise, so3_dt, r3_dt, dt = knotSpacing.identifyImuNoiseAndKnotSpacing(imu_t, imu_gyro, imu_acc)
+    gyroNoise, accNoise, so3_dt, r3_dt, dt = sew.identifyImuNoiseAndKnotSpacing(imu_t, imu_gyro, imu_acc)
 
     gyro_weight = np.sqrt(dt) / gyroNoise
     acc_weight = np.sqrt(dt) / accNoise

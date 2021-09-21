@@ -1,3 +1,4 @@
+from __future__ import print_function
 import yaml
 import sys
 import numpy as np
@@ -212,18 +213,9 @@ class AslamCamera(object):
         camera_model, intrinsics = params.getIntrinsics()
         dist_model, dist_coeff = params.getDistortion()
         resolution = params.getResolution()
-        try:
-            lineDelayNanos = params.getLineDelayNanos()
-        except RuntimeError as e:
-            msg = str(e)
-            if 'missing' in msg:
-                lineDelayNanos = 0
-            else:
-                raise e
-        except:
-            raise
+        lineDelayNanos = params.getLineDelayNanos()
         return AslamCamera(camera_model, intrinsics, dist_model, dist_coeff, resolution, lineDelayNanos)
-        
+
 
 #wrapper to ctach all KeyError exception (field missing in yaml ...)
 def catch_keyerror(f):
@@ -390,7 +382,7 @@ class CameraParameters(ParametersBase):
                
         if model not in distortionModelsAndNumParams:
             self.raiseError("Unknown distortion model '{}'. Supported models: {}. )".format(
-                model, ", ".join(distortionModelsAndNumParams.keys())))
+                model, ", ".join(list(distortionModelsAndNumParams.keys()))))
         
         if len(coeffs) != distortionModelsAndNumParams[model]:
             self.raiseError("distortion model '{}' requires {} coefficients; {} given".format(
@@ -430,9 +422,15 @@ class CameraParameters(ParametersBase):
 
     @catch_keyerror
     def getLineDelayNanos(self):
-        self.checkLineDelay(self.data["line_delay_nanoseconds"])
-        return self.data["line_delay_nanoseconds"]
-    
+        if "line_delay_nanoseconds" in self.data:
+            self.checkLineDelay(self.data["line_delay_nanoseconds"])
+            return self.data["line_delay_nanoseconds"]
+        else:
+            defaultLineDelay = 0
+            sm.logWarn("\"line_delay_nanoseconds\" is not found in {},"
+                       " will default to {}.".format(self.yamlFile, defaultLineDelay))
+            return defaultLineDelay
+
     def setLineDelayNanos(self, lineDelay):
         self.checkLineDelay(lineDelay)
         self.data["line_delay_nanoseconds"] = lineDelay
@@ -497,19 +495,19 @@ class CameraParameters(ParametersBase):
         else:
             self.raiseError("Unknown camera model '{}'.".format(camera_model))
 
-        print >> dest, "  Camera model: {0}".format(camera_model)
-        print >> dest, "  Focal length: {0}".format(focalLength)
-        print >> dest, "  Principal point: {0}".format(principalPoint)
+        print("  Camera model: {0}".format(camera_model), file=dest)
+        print("  Focal length: {0}".format(focalLength), file=dest)
+        print("  Principal point: {0}".format(principalPoint), file=dest)
         if camera_model == 'omni':
-            print >> dest, "  Omni xi: {0}".format(xi_omni)
+            print("  Omni xi: {0}".format(xi_omni), file=dest)
         if camera_model == 'eucm':
-            print >> dest, "  EUCM alpha: {0}".format(alpha_eucm)
-            print >> dest, "  EUCM beta: {0}".format(beta_eucm)
+            print("  EUCM alpha: {0}".format(alpha_eucm), file=dest)
+            print("  EUCM beta: {0}".format(beta_eucm), file=dest)
         if camera_model == 'ds':
-            print >> dest, "  DS xi: {0}".format(xi_ds)
-            print >> dest, "  DS alpha: {0}".format(alpha_ds)
-        print >> dest, "  Distortion model: {0}".format(dist_model)
-        print >> dest, "  Distortion coefficients: {0}".format(dist_coeff)
+            print("  DS xi: {0}".format(xi_ds), file=dest)
+            print("  DS alpha: {0}".format(alpha_ds), file=dest)
+        print("  Distortion model: {0}".format(dist_model), file=dest)
+        print("  Distortion coefficients: {0}".format(dist_coeff), file=dest)
 
 
 
@@ -576,8 +574,15 @@ class ImuParameters(ParametersBase):
             self.raiseError("invalid gravity")
 
     def getGravityInTarget(self):
-        self.checkGravity(self.data["gravity_in_target"])
-        return self.data["gravity_in_target"]
+        if "gravity_in_target" in self.data:
+            self.checkGravity(self.data["gravity_in_target"])
+            return self.data["gravity_in_target"]
+        else:
+            gW = [0, 9.81, 0]
+            sm.logWarn("\"gravity_in_target\" is not found in {}, "
+                       "will default to {}. Note that in kalibr "
+                       "only its magnitude matters.".format(self.yamlFile, gW))
+            return gW
 
     def setGravityInTarget(self, gravityInTarget):
         self.checkGravity(gravityInTarget)
@@ -629,15 +634,15 @@ class ImuParameters(ParametersBase):
         accelUncertaintyDiscrete, accelRandomWalk, accelUncertainty = self.getAccelerometerStatistics()
         gyroUncertaintyDiscrete, gyroRandomWalk, gyroUncertainty = self.getGyroStatistics()
  
-        print >> dest, "  Update rate: {0}".format(update_rate)
-        print >> dest, "  Accelerometer:"
-        print >> dest, "    Noise density: {0} ".format(accelUncertainty)
-        print >> dest, "    Noise density (discrete): {0} ".format(accelUncertaintyDiscrete)
-        print >> dest, "    Random walk: {0}".format(accelRandomWalk)
-        print >> dest, "  Gyroscope:"
-        print >> dest, "    Noise density: {0}".format(gyroUncertainty)
-        print >> dest, "    Noise density (discrete): {0} ".format(gyroUncertaintyDiscrete)
-        print >> dest, "    Random walk: {0}".format(gyroRandomWalk)
+        print("  Update rate: {0}".format(update_rate), file=dest)
+        print("  Accelerometer:", file=dest)
+        print("    Noise density: {0} ".format(accelUncertainty), file=dest)
+        print("    Noise density (discrete): {0} ".format(accelUncertaintyDiscrete), file=dest)
+        print("    Random walk: {0}".format(accelRandomWalk), file=dest)
+        print("  Gyroscope:", file=dest)
+        print("    Noise density: {0}".format(gyroUncertainty), file=dest)
+        print("    Noise density (discrete): {0} ".format(gyroUncertaintyDiscrete), file=dest)
+        print("    Random walk: {0}".format(gyroRandomWalk), file=dest)
         
 class ImuSetParameters(ParametersBase):
     def __init__(self, yamlFile, createYaml=False):
@@ -682,7 +687,7 @@ class CalibrationTargetParameters(ParametersBase):
                 targetCols = self.data["targetCols"]
                 rowSpacingMeters = self.data["rowSpacingMeters"]
                 colSpacingMeters = self.data["colSpacingMeters"]
-            except KeyError, e:
+            except KeyError as e:
                 self.raiseError("Calibration target configuration in {0} is missing the field: {1}".format(self.yamlFile, str(e)) )
             
             if not isinstance(targetRows,int) or targetRows < 3:
@@ -706,7 +711,7 @@ class CalibrationTargetParameters(ParametersBase):
                 targetCols = self.data["targetCols"]
                 spacingMeters = self.data["spacingMeters"]
                 asymmetricGrid = self.data["asymmetricGrid"]
-            except KeyError, e:
+            except KeyError as e:
                 self.raiseError("Calibration target configuration in {0} is missing the field: {1}".format(self.yamlFile, str(e)) )
             
             if not isinstance(targetRows,int) or targetRows < 3:
@@ -730,7 +735,7 @@ class CalibrationTargetParameters(ParametersBase):
                 tagCols = self.data["tagCols"]
                 tagSize = self.data["tagSize"]
                 tagSpacing = self.data["tagSpacing"]
-            except KeyError, e:
+            except KeyError as e:
                 self.raiseError("Calibration target configuration in {0} is missing the field: {1}".format(self.yamlFile, str(e)) )
             
             if not isinstance(tagRows,int) or tagRows < 3:
@@ -758,21 +763,21 @@ class CalibrationTargetParameters(ParametersBase):
         targetType = self.getTargetType()
         targetParams = self.getTargetParams()
         
-        print >> dest, "  Type: {0}".format(targetType)
+        print("  Type: {0}".format(targetType), file=dest)
         
         if targetType == 'checkerboard':        
-            print >> dest, "  Rows"
-            print >> dest, "    Count: {0}".format(targetParams['targetRows'])
-            print >> dest, "    Distance: {0} [m]".format(targetParams['rowSpacingMeters'])
-            print >> dest, "  Cols"
-            print >> dest, "    Count: {0}".format(targetParams['targetCols'])
-            print >> dest, "    Distance: {0} [m]".format(targetParams['colSpacingMeters'])
+            print("  Rows", file=dest)
+            print("    Count: {0}".format(targetParams['targetRows']), file=dest)
+            print("    Distance: {0} [m]".format(targetParams['rowSpacingMeters']), file=dest)
+            print("  Cols", file=dest)
+            print("    Count: {0}".format(targetParams['targetCols']), file=dest)
+            print("    Distance: {0} [m]".format(targetParams['colSpacingMeters']), file=dest)
         elif targetType == 'aprilgrid':
-            print >> dest, "  Tags: "
-            print >> dest, "    Rows: {0}".format(targetParams['tagRows'])
-            print >> dest, "    Cols: {0}".format(targetParams['tagCols'])
-            print >> dest, "    Size: {0} [m]".format(targetParams['tagSize'])
-            print >> dest, "    Spacing {0} [m]".format( targetParams['tagSize']*targetParams['tagSpacing'] )
+            print("  Tags: ", file=dest)
+            print("    Rows: {0}".format(targetParams['tagRows']), file=dest)
+            print("    Cols: {0}".format(targetParams['tagCols']), file=dest)
+            print("    Size: {0} [m]".format(targetParams['tagSize']), file=dest)
+            print("    Spacing {0} [m]".format( targetParams['tagSize']*targetParams['tagSpacing'] ), file=dest)
 
 
         
@@ -864,9 +869,14 @@ class CameraChainParameters(ParametersBase):
             if cam_id >= self.numCameras():
                 self.raiseError("out-of-range: camera id of {0}".format(cam_id))
 
-    @catch_keyerror
     def getLineDelay(self, camNr):
-        return self.data["cam{0}".format(camNr)]["line_delay_nanoseconds"]
+        if "line_delay_nanoseconds" in self.data["cam{0}".format(camNr)]:
+            return self.data["cam{0}".format(camNr)]["line_delay_nanoseconds"]
+        else:
+            defaultLineDelay = 0
+            sm.logWarn("\"line_delay_nanoseconds\" is not found in {} for camera {},"
+                       " will default to {}.".format(self.yamlFile, camNr, defaultLineDelay))
+            return defaultLineDelay
 
     def setLineDelay(self, camNr, line_delay_nanos):
         self.data["cam{0}".format(camNr)]["line_delay_nanoseconds"] = line_delay_nanos
@@ -901,21 +911,21 @@ class CameraChainParameters(ParametersBase):
     
     def printDetails(self, dest=sys.stdout):
         for camNr in range(0, self.numCameras()):
-            print "Camera chain - cam{0}:".format(camNr)
+            print("Camera chain - cam{0}:".format(camNr))
             camConfig = self.getCameraParameters(camNr)
             camConfig.printDetails(dest)
             
             #print baseline if available
             try:
                 T = self.getExtrinsicsLastCamToHere(camNr)
-                print >> dest, "  baseline:", T.T()
+                print("  baseline:", T.T(), file=dest)
             except:
-                print >> dest, "  baseline: no data available"
+                print("  baseline: no data available", file=dest)
                 pass
             #print T_cam_imu if available
             try:
                 T = self.getExtrinsicsImuToCam(camNr)
-                print >> dest, "  T_cam_imu:", T.T()
+                print("  T_cam_imu:", T.T(), file=dest)
             except:
-                print >> dest, "  T_cam_imu: no data available"
+                print("  T_cam_imu: no data available", file=dest)
                 pass

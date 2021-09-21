@@ -1,3 +1,4 @@
+from __future__ import print_function
 import math
 import sys
 
@@ -16,13 +17,13 @@ def sampleAndSaveBSplinePoses(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.T
         timeExpression = dv.toExpression()
         
         if time <= poseSplineDv.spline().t_min() or time >= poseSplineDv.spline().t_max():
-            print >> sys.stdout, "Warn: time out of range "
+            print("Warn: time out of range ", file=sys.stdout)
             continue
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
         sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c
         # quatInv used here to convert kalibr's JPL quaternion to Halmilton quaternion
-        print >> stream, '{:.9f}, {}, {}'.format(time, ','.join(map(str,sm_T_w_c.t())),
-                                                 ','.join(map(str, sm.quatInv(sm_T_w_c.q()))))
+        print('{:.9f}, {}, {}'.format(time, ','.join(map(str,sm_T_w_c.t())),
+                                      ','.join(map(str, sm.quatInv(sm_T_w_c.q())))), file=stream)
 
 def sampleBSplinePoses(stateTimes, poseSplineDv):
     """
@@ -42,7 +43,7 @@ def sampleBSplinePoses(stateTimes, poseSplineDv):
     frameId = 0
     for time in stateTimes:
         if time <= tmin or time >= tmax:
-            print "Warn: time out of range in generating a state"
+            print("Warn: time out of range in generating a state")
             continue
         dv = aopt.Scalar(time)
         timeExpression = dv.toExpression()
@@ -81,7 +82,7 @@ def sampleBSplines(stateTimes, poseSplineDv, gyroBiasSpline, accBiasSpline, time
     frameId = 0
     for time in stateTimes:
         if time <= tmin or time >= tmax:
-            print "Warn: time out of range in generating a state"
+            print("Warn: time out of range in generating a state")
             continue
         dv = aopt.Scalar(time)
         timeExpression = dv.toExpression()  
@@ -138,7 +139,7 @@ def saveImuMeasurementsFromPoseBSpline(cself, filename):
     :param filename:
     :return: time, predicted angular rate, predicted accelerometer data, gyro bias, accelerometer bias
     """
-    print >> sys.stdout, "  Saving IMU measurements generated from B-spline to", filename
+    print("  Saving IMU measurements generated from B-spline to", filename, file=sys.stdout)
 
     idx = 0
     imu = cself.ImuList[idx]
@@ -153,12 +154,12 @@ def saveImuMeasurementsFromPoseBSpline(cself, filename):
     gyro_bias_spline = np.array([imu.evaluateGyroBias(t) for t in times])
     acc_bias_spline = np.array([imu.evaluateAccelerometerBias(t) for t in times])
 
-    print >> sys.stdout, '\tEpitome of predicted inertial measurements'
-    print >> sys.stdout, "\t#times", times.shape
-    print >> sys.stdout, "\t#gyro", predictedAng_body.shape
-    print >> sys.stdout, "\t#accel", predictedAccel_body.shape
-    print >> sys.stdout, "\t#gyro bias", gyro_bias_spline.shape
-    print >> sys.stdout, "\t#accel bias", acc_bias_spline.shape
+    print('\tEpitome of predicted inertial measurements', file=sys.stdout)
+    print("\t#times", times.shape, file=sys.stdout)
+    print("\t#gyro", predictedAng_body.shape, file=sys.stdout)
+    print("\t#accel", predictedAccel_body.shape, file=sys.stdout)
+    print("\t#gyro bias", gyro_bias_spline.shape, file=sys.stdout)
+    print("\t#accel bias", acc_bias_spline.shape, file=sys.stdout)
 
     predictedImu=np.concatenate((np.array([times]).T, predictedAng_body, predictedAccel_body, gyro_bias_spline, acc_bias_spline),axis=1)
     np.savetxt(filename,predictedImu, fmt=['%.9f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f', '%.7f'])
@@ -173,7 +174,7 @@ def saveBSpline(cself, outputDir):
     imuTimes = np.array([im.stamp.toSec() + imu.timeOffset for im in imu.imuData if
                          poseSplineDv.spline().t_min() < im.stamp.toSec() + imu.timeOffset < poseSplineDv.spline().t_max()])
     refPoseStream = open("sampled_poses.txt", 'w')
-    print >> refPoseStream, "%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)"
+    print("%poses generated at the IMU rate from the B-spline: time, T_w_b(txyz, qxyzw)", file=refPoseStream)
     sampleAndSaveBSplinePoses(imuTimes, poseSplineDv, stream=refPoseStream)
     refPoseStream.close()
 
@@ -251,10 +252,10 @@ def generateRandomPoses():
 
 def savePoses(timeList, smTList, outputfile):
     with open(outputfile, "w") as stream:
-        print >> stream, "%time (sec), T_w_c (txyz, qxyzw)"
+        print("%time (sec), T_w_c (txyz, qxyzw)", file=stream)
         for index, T in enumerate(smTList):
-            print >> stream, '{:.9f}, {}, {}'.format(timeList[index], ','.join(map(str, T.t())),
-                                                     ','.join(map(str, sm.quatInv(T.q()))))
+            print('{:.9f}, {}, {}'.format(timeList[index], ','.join(map(str, T.t())),
+                                          ','.join(map(str, sm.quatInv(T.q())))), file=stream)
 
 
 def loadPoses(poseFile):

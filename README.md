@@ -1,6 +1,6 @@
 ![Kalibr](https://raw.githubusercontent.com/wiki/ethz-asl/kalibr/images/kalibr_small.png)
 
-*Ubuntu 14.04+ROS indigo*: [![Build Status](https://jenkins.asl.ethz.ch/buildStatus/icon?job=kalibr_weekly/label=ubuntu-trusty)](https://jenkins.asl.ethz.ch/job/kalibr_weekly/label=ubuntu-trusty/) *Ubuntu 16.04+ROS kinetic*: [![Build Status](https://jenkins.asl.ethz.ch/buildStatus/icon?job=kalibr_weekly/label=ubuntu-trusty)](https://jenkins.asl.ethz.ch/job/kalibr_weekly/label=ubuntu-xenial/)
+<!--*Ubuntu 14.04+ROS indigo*: [![Build Status](https://jenkins.asl.ethz.ch/buildStatus/icon?job=kalibr_weekly/label=ubuntu-trusty)](https://jenkins.asl.ethz.ch/job/kalibr_weekly/label=ubuntu-trusty/) *Ubuntu 16.04+ROS kinetic*: [![Build Status](https://jenkins.asl.ethz.ch/buildStatus/icon?job=kalibr_weekly/label=ubuntu-trusty)](https://jenkins.asl.ethz.ch/job/kalibr_weekly/label=ubuntu-xenial/)-->
 
 ## Introduction
 Kalibr is a toolbox that solves the following calibration problems:
@@ -16,6 +16,56 @@ Kalibr is a toolbox that solves the following calibration problems:
 **Please find more information on the [wiki pages](https://github.com/ethz-asl/kalibr/wiki) of this repository.**
 
 **For questions or comments, please open an issue on Github.**
+
+## Installation
+### [<=Ubuntu 18.04 + ROS1 melodic]
+Follow instructions at [here](https://github.com/ethz-asl/kalibr/wiki/installation).
+
+### [Ubuntu 20.04 + ROS1 noetic](https://github.com/ethz-asl/kalibr/issues/396)
+
+```
+sudo apt update
+sudo apt-get install python3-setuptools python3-rosinstall ipython3 libeigen3-dev libboost-all-dev doxygen libopencv-dev \
+ros-noetic-vision-opencv ros-noetic-image-transport-plugins ros-noetic-cmake-modules python3-software-properties \
+software-properties-common libpoco-dev python3-matplotlib python3-scipy python3-git python3-pip libtbb-dev libblas-dev \
+liblapack-dev libv4l-dev python3-catkin-tools python3-igraph libsuitesparse-dev
+
+pip3 install wxPython
+```
+If you encounter errors like "E: Unable to locate package python3-catkin-tools",
+then setup your sources.list and keys as instructed [here](http://wiki.ros.org/Installation/Ubuntu).
+
+```
+mkdir ~/kalibr_ws/src
+cd ~/kalibr_ws/src
+git clone --recursive https://github.com/ori-drs/kalibr
+
+cd ~/kalibr_ws
+source /opt/ros/noetic/setup.bash
+catkin init
+catkin config --extend /opt/ros/noetic
+catkin config --merge-devel
+catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+catkin build -DCMAKE_BUILD_TYPE=Release -j4
+```
+
+### Comments from authors of [ori-drs](https://github.com/ori-drs/kalibr.git)
+We've upgraded and fixed kalibr at ORI for 20.04. Please use our fork: `git clone https://github.com/ori-drs/kalibr.git --branch noetic-devel`.
+
+- Use `rosdep` to install almost all required dependencies: `rosdep install --from-paths ./ -iry`.
+- Then install the two missing runtime dependencies: `sudo apt install python3-wxgtk4.0 python3-igraph`
+- Unittests are currently failing on 20.04 and thus deactivated on the buildserver.
+
+### Test with IMU-camera calibration sample data
+
+```
+source ~/kalibr_ws/devel/setup.bash
+cd /path/to/kalibr_dynamic_sample
+kalibr_calibrate_imu_camera --target april_6x6.yaml --cam camchain.yaml --imu imu_adis16448.yaml --bag dynamic.bag --bag-from-to 5 45
+```
+Also refer to [test_on_dynamic_sample](ci/test_on_dynamic_sample.sh) for shell scripts on
+rolling shutter camera-IMU calibration, simulation, and noise identification.
 
 ## Tutorial: IMU-camera calibration
 A video tutorial for the IMU-camera calibration can be found here:

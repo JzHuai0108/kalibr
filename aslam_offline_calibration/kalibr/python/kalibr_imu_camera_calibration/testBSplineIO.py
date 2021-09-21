@@ -1,5 +1,5 @@
 import numpy as np
-import BSplineIO
+from . import BSplineIO
 
 def testSerializePoses():
     timeList, smTList = BSplineIO.generateRandomPoses()

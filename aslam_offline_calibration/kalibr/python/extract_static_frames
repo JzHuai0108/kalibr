@@ -63,10 +63,10 @@ def parseArgs():
     return parser.parse_args()
 
 def initBagDataset(bagfile, topic, from_to):
-    print "\tDataset:          {0}".format(bagfile)
-    print "\tTopic:            {0}".format(topic)
+    print("\tDataset:          {0}".format(bagfile))
+    print("\tTopic:            {0}".format(topic))
     reader = kc.BagImageDatasetReader(bagfile, topic, bag_from_to=from_to)
-    print "\tNumber of images: {0}".format(reader.numImages())
+    print("\tNumber of images: {0}".format(reader.numImages()))
     return reader
 
 #available models
@@ -378,7 +378,11 @@ def main():
     cameraList = initializeCameraIntrinsics(parsed.bagfile, parsed.topics, parsed.models,
                                             parsed.target_yaml, [25, 45], parsed.showextraction, parsed.verbose)
 
-    bagtag = parsed.bagfile.translate(None, "<>:/\|?*").replace('.bag', '', 1)
+    try:
+        regulartag = parsed.bagfile.translate({ord(c):None for c in "<>:/\|?*"})
+    except TypeError:
+        regulartag = parsed.bagfile.translate(None, "<>:/\|?*")
+    bagtag = regulartag.replace('.bag', '', 1)
     chain_yaml = "initial-camchain.yaml"
     saveCameraIntrinsics(cameraList, parsed.topics, chain_yaml)
 

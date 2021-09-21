@@ -20,6 +20,8 @@ namespace cameras {
 
 class ObservationInterface {
  public:
+  virtual ~ObservationInterface() {}
+
   /// \brief get all (observed) corners in image coordinates (order matches getCornersImageFrame)
   virtual unsigned int getCornersTargetFrame(std::vector<cv::Point3f> &outCornerList) const = 0;
   /// \brief get all corners in target frame coordinates (order matches getObservedTargetFrame)
@@ -89,8 +91,8 @@ class PnPObservation : public ObservationInterface {
     }
   }
 
-  unsigned int getCornerReprojection(const boost::shared_ptr<CameraGeometryBase> cameraGeometry,
-                                     std::vector<cv::Point2f> &outPointReproj) const {
+  unsigned int getCornerReprojection(const boost::shared_ptr<CameraGeometryBase> /*cameraGeometry*/,
+                                     std::vector<cv::Point2f> &/*outPointReproj*/) const {
     return 0;
   }
 

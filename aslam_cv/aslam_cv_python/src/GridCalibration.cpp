@@ -156,7 +156,7 @@ Eigen::MatrixXd getAllCornersTargetFrame(
     aslam::cameras::GridCalibrationTargetObservation * frame) {
   // Get the corners in the target frame
   Eigen::Matrix<double, -1, 3> targetCorners;
-  unsigned int numCorners = frame->getAllCornersTargetFrame(targetCorners);
+  /*unsigned int numCorners = */frame->getAllCornersTargetFrame(targetCorners);
   return targetCorners;
 }
 

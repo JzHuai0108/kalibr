@@ -1,3 +1,9 @@
+"""
+Simulate camera and IMU data given pose and bias bsplines.
+This module only supports saving simulation results for one camera
+limited by the maplab vertex csv file.
+"""
+
 import copy
 import math
 import os
@@ -13,7 +19,7 @@ import sm
 import kalibr_common as kc
 import kalibr_errorterms as ket
 
-import BSplineIO
+from . import BSplineIO
 
 def getCameraPoseAt(timeScalar, poseSplineDv, T_b_c):
     timeOffsetPadding = 0.0
@@ -89,17 +95,20 @@ class RsCameraSimulator(object):
         self.showOnScreen = not args.dontShowReport
 
         print("Camera chain from {}".format(args.chain_yaml))
-        chain = kc.CameraChainParameters(args.chain_yaml)
-        camNr = 0
-        camConfig = chain.getCameraParameters(camNr)
-        camConfig.printDetails()
-        printExtraCameraDetails(camConfig)
-        self.T_imu_cam = sm.Transformation()
-        self.timeOffset = 0
-
-        camera = kc.AslamCamera.fromParameters(camConfig)
-        self.camGeometry = camera.geometry
-        self.cameraConfig = camConfig
+        self.chain = kc.CameraChainParameters(args.chain_yaml)
+        self.T_imu_cam_list = []
+        self.timeOffsetList = []
+        self.camGeometryList = []
+        numCameras = self.chain.numCameras()
+        for i in range(numCameras):
+            camConfig = self.chain.getCameraParameters(i)
+            camConfig.printDetails()
+            printExtraCameraDetails(camConfig)
+            # These parameters are set to default values assuming no IMU is present.
+            self.T_imu_cam_list.append(sm.Transformation())
+            self.timeOffsetList.append(0)
+            camera = kc.AslamCamera.fromParameters(camConfig)
+            self.camGeometryList.append(camera.geometry)
 
         targetConfig = kc.CalibrationTargetParameters(args.target_yaml)
         print("Target used in the simulation:")
@@ -107,8 +116,6 @@ class RsCameraSimulator(object):
         self.targetObservation = None
         self.allTargetCorners = None
         self.setupCalibrationTarget(targetConfig, showExtraction=False, showReproj=False, imageStepping=False)
-        self.imageWidth = self.cameraConfig.getResolution()[0]
-        self.imageHeight = self.cameraConfig.getResolution()[1]
 
     def setupCalibrationTarget(self, targetConfig, showExtraction=False, showReproj=False, imageStepping=False):
         '''copied from IccCamera class'''
@@ -174,13 +181,18 @@ class RsCameraSimulator(object):
         return self.generateSampleTimes(tmin, tmax, rate)
 
     def checkNaiveVsNewtonRsProjection(self, outputDir):
-        timePadding = 2.5 / self.cameraConfig.getUpdateRate()
-        trueFrameTimes = self.generateStateTimes(self.cameraConfig.getUpdateRate(), timePadding)
+        camId = 0  # only check one camera
+        camConfig = self.chain.getCameraParameters(camId)
+        timePadding = 2.5 / camConfig.getUpdateRate()
+        trueFrameTimes = self.generateStateTimes(camConfig.getUpdateRate(), timePadding)
         state_time = trueFrameTimes[0]
-        line_delay = float(self.cameraConfig.getLineDelayNanos()) * 1e-9
-        imageCornersNaive = self.naiveMethodToRsProjection(state_time, line_delay, self.T_imu_cam, False)
+        line_delay = float(camConfig.getLineDelayNanos()) * 1e-9
+        resolution = camConfig.getResolution()
+        imageCornersNaive = self.naiveMethodToRsProjection(self.camGeometryList[camId], state_time, line_delay,
+                                                           self.T_imu_cam_list[camId], resolution, False)
         imageCornersNewton, unusedKeypoints, _ = \
-            self.newtonMethodToRsProjection(state_time, line_delay, self.T_imu_cam, 1.0, False)
+            self.newtonMethodToRsProjection(self.camGeometryList[camId], state_time, line_delay,
+                                            self.T_imu_cam_list[camId], resolution, 1.0, False)
         if imageCornersNaive.shape[0] == 0 or imageCornersNewton.shape[0] == 0:
             print("None successfully projected landmarks!")
         elif imageCornersNaive.shape[0] == imageCornersNewton.shape[0]:
@@ -199,7 +211,7 @@ class RsCameraSimulator(object):
                     np.concatenate((imageCornersNaive[:lastIndex, :, 0], imageCornersNewton[:lastIndex, :, 0]),
                                    axis=1)))
 
-    def naiveMethodToRsProjection(self, state_time, line_delay, T_imu_cam, verbose=False):
+    def naiveMethodToRsProjection(self, camGeometry, state_time, line_delay, T_imu_cam, resolution, verbose=False):
         """
         This method is not proved theoretically to converge, but it performs as precise as
         Newton's method empirically, though slower.
@@ -208,33 +220,34 @@ class RsCameraSimulator(object):
         """
         imageCornerProjected= list()
         if verbose:
-            print 'Naive method for state time %.9f' % state_time
+            print('Naive method for state time %.9f' % state_time)
+        imageHeight = resolution[1]
         for iota in range(self.targetObservation.getTotalTargetPoint()):
             # get the initial observation
             sm_T_w_c, validPose = getCameraPoseAt(state_time, self.poseSplineDv, T_imu_cam)
             if not validPose:
                 continue
-            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) # 3x1.
+            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_c, iota) # 3x1.
             if not validProjection:
                 continue
             numIter = 0
             aborted = False
             if verbose:
-                print 'lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T
+                print('lmId', iota, 'iter', numIter, 'image coords', lastImagePoint.T)
             if np.absolute(line_delay) < 1e-8:
                 imageCornerProjected.append(lastImagePoint)
                 continue
             while numIter < 8:
-                currTime = (lastImagePoint[1, 0] - self.imageHeight * 0.5) * line_delay + state_time
+                currTime = (lastImagePoint[1, 0] - imageHeight * 0.5) * line_delay + state_time
                 sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, T_imu_cam)
-                validProjection, imagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                validProjection, imagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota)
                 if not validPose or not validProjection:
                     aborted = True
                     break
                 delta = np.absolute(lastImagePoint[1,0] - imagePoint[1,0])
                 numIter += 1
                 if verbose:
-                    print 'lmId', iota, 'iter', numIter, 'image coords', imagePoint.T
+                    print('lmId', iota, 'iter', numIter, 'image coords', imagePoint.T)
                 lastImagePoint = imagePoint
                 if delta < 1e-3:
                     break
@@ -244,7 +257,8 @@ class RsCameraSimulator(object):
                 imageCornerProjected.append(lastImagePoint)
         return np.array(imageCornerProjected)
 
-    def newtonMethodToRsProjection(self, state_time, line_delay, T_imu_cam, reprojectionSigma = 1.0, verbose = False):
+    def newtonMethodToRsProjection(self, camGeometry, state_time, line_delay, T_imu_cam, resolution,
+                                   reprojectionSigma = 1.0, verbose = False):
         """
         params:
             state_time: camera mid exposure timestamp without time offset or rolling shutter effect.
@@ -273,9 +287,11 @@ class RsCameraSimulator(object):
         numOutOfBound = 0
         numFailedProjection = 0
         numLandmarks = self.targetObservation.getTotalTargetPoint()
+        imageWidth = resolution[0]
+        imageHeight = resolution[1]
         for iota in range(numLandmarks):
             sm_T_w_c, validPose = getCameraPoseAt(state_time, self.poseSplineDv, T_imu_cam)
-            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_c, iota) # 3x1.
+            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_c, iota) # 3x1.
             if not validPose:
                 numOutOfBound += 1
                 continue
@@ -300,10 +316,10 @@ class RsCameraSimulator(object):
                 # now we have y_0, i.e., lastImagePoint[1, 0], complete the iteration by computing y_1
 
                 # compute g(y_0)
-                currTime = (lastImagePoint[1, 0] - self.imageHeight * 0.5) * line_delay + state_time
+                currTime = (lastImagePoint[1, 0] - imageHeight * 0.5) * line_delay + state_time
                 sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, T_imu_cam)
 
-                validProjection, imagePoint0 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                validProjection, imagePoint0 = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota)
                 if not validPose:
                     numOutOfBound += 1
                     aborted = True
@@ -314,10 +330,10 @@ class RsCameraSimulator(object):
                     break
                 # compute Jacobian of g(y) relative to y at y_0
                 eps = 1
-                currTime = (lastImagePoint[1, 0] + eps - self.imageHeight * 0.5) * line_delay + state_time
+                currTime = (lastImagePoint[1, 0] + eps - imageHeight * 0.5) * line_delay + state_time
                 sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, T_imu_cam)
 
-                validProjection, imagePoint1 = self.targetObservation.projectATargetPoint(self.camGeometry, sm_T_w_cx, iota)
+                validProjection, imagePoint1 = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota)
                 if not validPose:
                     numOutOfBound += 1
                     aborted = True
@@ -342,8 +358,8 @@ class RsCameraSimulator(object):
                 imageCornerProjected.append(imagePoint0)
                 xnoise = gauss(0.0, reprojectionSigma)
                 ynoise = gauss(0.0, reprojectionSigma)
-                noisyPoint = [noisyValue(imagePoint0[0, 0], self.imageWidth, xnoise),
-                              noisyValue(imagePoint0[1, 0], self.imageHeight, ynoise)]
+                noisyPoint = [noisyValue(imagePoint0[0, 0], imageWidth, xnoise),
+                              noisyValue(imagePoint0[1, 0], imageHeight, ynoise)]
                 frameKeypoints.append((iota, kpId, noisyPoint[0], noisyPoint[1], reprojectionSigma, 12, -1))
                 imageCornerProjectedOffset.append(np.linalg.norm([initialImagePoint[0, 0] - noisyPoint[0],
                                                                   initialImagePoint[1, 0] - noisyPoint[1]]))
@@ -367,29 +383,30 @@ class RsCameraSimulator(object):
         imageCornerOffsetNorms = list()
         bins = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, \
                 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 9.0, 10.0]
-        imageNoise = self.cameraConfig.getImageNoise()
-        
+
         frameKeypointList = list()
 
         landmarkObservations = dict()
         for iota in range(self.targetObservation.getTotalTargetPoint()):
             landmarkObservations[iota] = list()
 
-        cameraIndex = 0 # assume only one camera is used.
-        cameraTimeOffset = self.timeOffset
-        for vertexId, frameTime in enumerate(trueFrameTimes):
-            rawFrameTime = frameTime - cameraTimeOffset
-            _, noisyKeypoints, keypointOffsets = \
-                self.newtonMethodToRsProjection(frameTime,
-                                                float(self.cameraConfig.getLineDelayNanos()) * 1e-9,
-                                                self.T_imu_cam,
-                                                imageNoise)
-            imageCornerOffsetNorms += keypointOffsets
-            if vertexId % 300 == 0:
-                print('  Projected {:d} target landmarks for state at {:.9f}'.format(len(noisyKeypoints), frameTime))
-            for keypoint in noisyKeypoints:
-                landmarkObservations[keypoint[0]].append((vertexId, cameraIndex, keypoint[1]))
-            frameKeypointList.append((acv.Time(rawFrameTime), vertexId, cameraIndex, noisyKeypoints))
+        for cameraIndex in range(self.chain.numCameras()):
+            cameraTimeOffset = self.chain.getTimeshiftCamImu(cameraIndex)
+            T_imu_cam = self.T_imu_cam_list[cameraIndex]
+            camConfig = self.chain.getCameraParameters(cameraIndex)
+            resolution = camConfig.getResolution()
+            imageNoise = camConfig.getImageNoise()
+            linedelaysecs = float(camConfig.getLineDelayNanos()) * 1e-9
+            for vertexId, frameTime in enumerate(trueFrameTimes):
+                rawFrameTime = frameTime - cameraTimeOffset
+                _, noisyKeypoints, keypointOffsets = self.newtonMethodToRsProjection(
+                    self.camGeometryList[cameraIndex], frameTime, linedelaysecs, T_imu_cam, resolution, imageNoise)
+                imageCornerOffsetNorms += keypointOffsets
+                if vertexId % 300 == 0:
+                    print('  Projected {:d} target landmarks for state at {:.9f}'.format(len(noisyKeypoints), frameTime))
+                for keypoint in noisyKeypoints:
+                    landmarkObservations[keypoint[0]].append((vertexId, cameraIndex, keypoint[1]))
+                frameKeypointList.append((acv.Time(rawFrameTime), vertexId, cameraIndex, noisyKeypoints))
 
         observationCsv = os.path.join(outputDir, "observations.csv")
         kc.VimapCsvWriter.saveObservations(landmarkObservations, observationCsv)
@@ -415,14 +432,16 @@ class RsCameraSimulator(object):
             for index, row in enumerate(self.allTargetCorners):
                 stream.write("{}, {}, {}, {}\n".format(index, row[0], row[1], row[2]))
 
-    def computeCameraRate(self):
-        lineDelay = self.cameraConfig.getLineDelayNanos()
-        maxFrameRate = math.floor(1e9 / ((lineDelay + 1000) * self.imageHeight))
-        cameraRate = min(maxFrameRate, self.cameraConfig.getUpdateRate())
+    def computeCameraRate(self, camId):
+        camConfig = self.chain.getCameraParameters(camId)
+        lineDelay = camConfig.getLineDelayNanos()
+        imageHeight = camConfig.getResolution()[1]
+        maxFrameRate = math.floor(1e9 / ((lineDelay + 1000) * imageHeight))
+        cameraRate = min(maxFrameRate, camConfig.getUpdateRate())
         return cameraRate
 
     def simulateStates(self, outputDir):
-        cameraRate = self.computeCameraRate()
+        cameraRate = self.computeCameraRate(0)
         timePadding = 2.5 / cameraRate
         trueFrameTimes = self.generateStateTimes(cameraRate, timePadding)
 
@@ -435,11 +454,24 @@ class RsCameraSimulator(object):
             print("  Written simulated states to {}".format(vertexCsv))
         return trueFrameTimes
 
+    def saveCameraIntrinsics(self, outputDir):
+        """
+        save the intrinsics for only one camera.
+        :param outputDir:
+        :return:
+        """
+        yamlfile = os.path.join(outputDir, "camchain.yaml")
+        monocamchain = kc.CameraChainParameters(yamlfile, createYaml=True)
+        camParams = self.chain.getCameraParameters(0)
+        monocamchain.addCameraAtEnd(camParams)
+        monocamchain.writeYaml()
+
     def simulate(self, outputDir):
         self.simulateLandmarks(outputDir)
         trueFrameTimes = self.simulateStates(outputDir)
         print("Simulating camera observations...")
         self.simulateCameraObservations(trueFrameTimes, outputDir)
+        self.saveCameraIntrinsics(outputDir)
 
 class RsCameraImuSimulator(RsCameraSimulator):
     '''
@@ -455,11 +487,12 @@ class RsCameraImuSimulator(RsCameraSimulator):
             self.gyroBiasSplineDv = BSplineIO.loadBSpline(args.gyro_bias_file)
             self.accBiasSplineDv = BSplineIO.loadBSpline(args.acc_bias_file)
 
-        chain = kc.CameraChainParameters(args.chain_yaml)
-        camNr = 0
-        T_cam_imu = chain.getExtrinsicsImuToCam(camNr)
-        self.T_imu_cam = T_cam_imu.inverse()
-        self.timeOffset = chain.getTimeshiftCamImu(camNr)
+        self.T_imu_cam_list = []
+        self.timeOffsetList = []
+        for camId in range(self.chain.numCameras()):
+            T_cam_imu = self.chain.getExtrinsicsImuToCam(camId)
+            self.T_imu_cam_list.append(T_cam_imu.inverse())
+            self.timeOffsetList.append(self.chain.getTimeshiftCamImu(camId))
 
         print("IMU configuration:")
         self.imuConfig = kc.ImuParameters(args.imu_yaml)
@@ -554,7 +587,7 @@ class RsCameraImuSimulator(RsCameraSimulator):
 
     def simulateImuData(self, outputDir):
         print("Simulating IMU data...")
-        cameraRate = self.computeCameraRate()
+        cameraRate = self.computeCameraRate(0)
         imuTimePadding = 2.0 / cameraRate
         trueImuTimes = self.generateStateTimes(self.imuConfig.getUpdateRate(), imuTimePadding)
         imuTimes, imuData, imuBiases = self.simulateImuDataAtTimes(trueImuTimes)
@@ -571,7 +604,11 @@ class RsCameraImuSimulator(RsCameraSimulator):
                 stream.write("{}, {}, {}\n".format(BSplineIO.secondToNanosecondString(time), dataString, biasString))
 
     def simulateStates(self, outputDir):
-        cameraRate = self.computeCameraRate()
+        """
+        save poses for every image at timestamp in camera clock.
+        Because of the format of vertices.csv, we only support monocular camera - IMU setup.
+        """
+        cameraRate = self.computeCameraRate(0)
         timePadding = 2.5 / cameraRate
         trueFrameTimes = self.generateStateTimes(cameraRate, timePadding)
 
@@ -582,9 +619,9 @@ class RsCameraImuSimulator(RsCameraSimulator):
         with open(vertexCsv, 'w') as vertexStream:
             if self.gyroBiasSplineDv:
                 BSplineIO.saveStates(trueFrameTimes, self.poseSplineDv, self.gyroBiasSplineDv.spline(),
-                                     self.accBiasSplineDv.spline(), self.timeOffset, vertexStream)
+                                     self.accBiasSplineDv.spline(), self.timeOffsetList[0], vertexStream)
             else:
-                BSplineIO.saveStates(trueFrameTimes, self.poseSplineDv, None, None, self.timeOffset, vertexStream)
+                BSplineIO.saveStates(trueFrameTimes, self.poseSplineDv, None, None, self.timeOffsetList[0], vertexStream)
             print("  Written simulated states to {}".format(vertexCsv))
         return trueFrameTimes
 

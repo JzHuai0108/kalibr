@@ -2,7 +2,7 @@ import time
 
 import aslam_backend as aopt
 import aslam_splines as asp
-import IccUtil as util
+from . import IccUtil as util
 import incremental_calibration as inc
 import kalibr_common as kc
 import sm
@@ -23,13 +23,10 @@ class IccCalibratorConfiguration(object):
                           'chainExtrinsics': False, 'gravityLength': False, 'pose': True, 'landmarks': False}
     initialGravityEstimate = np.array([0.0,9.81,0.0])
 
-def addSplineDesignVariables(problem, dvc, setActive=True, group_id=HELPER_GROUP_ID):
-    for i in range(0,dvc.numDesignVariables()):
-        dv = dvc.designVariable(i)
-        dv.setActive(setActive)
-        problem.addDesignVariable(dv, group_id)
 
 class IccCalibrator(object):
+    CALIBRATION_GROUP_ID = CALIBRATION_GROUP_ID
+    HELPER_GROUP_ID = HELPER_GROUP_ID
     def __init__(self, config):
         self.ImuList = []
         self.__config = config
@@ -47,7 +44,7 @@ class IccCalibrator(object):
     def initDesignVariables(self, problem, poseSpline):
         # Initialize the system pose spline (always attached to imu0) 
         self.poseDv = asp.BSplinePoseDesignVariable( poseSpline )
-        addSplineDesignVariables(problem, self.poseDv)
+        self.addSplineDesignVariables(problem, self.poseDv)
 
         # Add the calibration target orientation design variable. (expressed as gravity vector in target frame)
         if self.__config.estimateParameters['gravityLength']:
@@ -97,23 +94,23 @@ class IccCalibrator(object):
                       timeOffsetConstantSparsityPattern=0.08,
                       verbose=False  ):
 
-        print "\tSpline order: %d" % (splineOrder)
-        print "\tBias spline order: %d" % (biasSplineOrder)
-        print "\tPose knots per second: %d" % (poseKnotsPerSecond)
-        print "\tDo pose motion regularization: %s" % (doPoseMotionError)
-        print "\t\txddot translation variance: %f" % (mrTranslationVariance)
-        print "\t\txddot rotation variance: %f" % (mrRotationVariance)
-        print "\tBias knots per second: %d" % (biasKnotsPerSecond)
-        print "\tDo bias motion regularization: %s" % (doBiasMotionError)
-        print "\tBlake-Zisserman on reprojection errors %s" % blakeZisserCam
-        print "\tAcceleration Huber width (sigma): %f" % (huberAccel)
-        print "\tGyroscope Huber width (sigma): %f" % (huberGyro)
-        print "\tDo time calibration: %s" % (self.__config.estimateParameters['timeOffset'])
-        print "\tMax iterations: %d" % (maxIterations)
-        print "\tTime offset padding: %f" % (timeOffsetPadding)
+        print("\tSpline order: %d" % (splineOrder))
+        print("\tBias spline order: %d" % (biasSplineOrder))
+        print("\tPose knots per second: %d" % (poseKnotsPerSecond))
+        print("\tDo pose motion regularization: %s" % (doPoseMotionError))
+        print("\t\txddot translation variance: %f" % (mrTranslationVariance))
+        print("\t\txddot rotation variance: %f" % (mrRotationVariance))
+        print("\tBias knots per second: %d" % (biasKnotsPerSecond))
+        print("\tDo bias motion regularization: %s" % (doBiasMotionError))
+        print("\tBlake-Zisserman on reprojection errors %s" % blakeZisserCam)
+        print("\tAcceleration Huber width (sigma): %f" % (huberAccel))
+        print("\tGyroscope Huber width (sigma): %f" % (huberGyro))
+        print("\tDo time calibration: %s" % (self.__config.estimateParameters['timeOffset']))
+        print("\tMax iterations: %d" % (maxIterations))
+        print("\tTime offset padding: %f" % (timeOffsetPadding))
 
         for id, cam in enumerate(self.CameraChain.camList):
-            print("\tCamera {} use rolling shutter model? {}, line delay {} (sec).".format(
+            print("\tCamera {} uses rolling shutter model? {}, line delay {} (sec).".format(
                 id, cam.isRollingShutter(), cam.getLineDelaySeconds()))
             cam.computeCameraPoses()
 
@@ -278,7 +275,7 @@ class IccCalibrator(object):
         try:
             chain.writeYaml(resultFile)
         except:
-            print "ERROR: Could not write parameters to file: {0}\n".format(resultFile)
+            print("ERROR: Could not write parameters to file: {0}\n".format(resultFile))
     
     def computeResidualStatistics(self):
         """
@@ -370,3 +367,9 @@ class IccCalibrator(object):
             stats[imuName]["gyroscope_random_walk"] = gyroWalkList
         return stats
 
+    @staticmethod
+    def addSplineDesignVariables(problem, dvc, setActive=True, group_id=HELPER_GROUP_ID):
+        for i in range(0,dvc.numDesignVariables()):
+            dv = dvc.designVariable(i)
+            dv.setActive(setActive)
+            problem.addDesignVariable(dv, group_id)

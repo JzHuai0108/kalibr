@@ -12,7 +12,7 @@ def saveObservations(landmarkObservations, observationCsv):
     with open(observationCsv, 'w') as stream:
         header = ', '.join(["vertex index", "frame index", "keypoint index", "landmark index"])
         stream.write('{}\n'.format(header))
-        for landmarkId, observationList in sorted(landmarkObservations.iteritems()):
+        for landmarkId, observationList in sorted(landmarkObservations.items()):
             for observation in observationList:
                 stream.write('{}, {}, {}, {}\n'.format(observation[0], observation[1], observation[2], landmarkId))
 
@@ -62,10 +62,10 @@ def writeOpenCVYaml(initialParameters, yamlFile):
     """
     with open(yamlFile, 'w') as stream:
         stream.write("%YAML:1.0\n")
-        for key, val in initialParameters.iteritems():
+        for key, val in initialParameters.items():
             if key.startswith("cam"):
                 stream.write("{}:\n".format(key))
-                for key_c, val_c in val.iteritems():
+                for key_c, val_c in val.items():
                     if key_c == "T_imu_cam":
                         stream.write("  T_imu_cam: !!opencv-matrix\n")
                         stream.write("    cols: {}\n".format(val_c.shape[1]))
