@@ -18,7 +18,7 @@ Kalibr is a toolbox that solves the following calibration problems:
 **For questions or comments, please open an issue on Github.**
 
 ## Installation
-### [<=Ubuntu 18.04 + ROS1 melodic]
+### <=Ubuntu 18.04 + ROS1 melodic
 Follow instructions at [here](https://github.com/ethz-asl/kalibr/wiki/installation).
 
 ### [Ubuntu 20.04 + ROS1 noetic](https://github.com/ethz-asl/kalibr/issues/396)
