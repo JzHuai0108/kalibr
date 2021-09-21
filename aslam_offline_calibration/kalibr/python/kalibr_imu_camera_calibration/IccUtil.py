@@ -8,7 +8,7 @@ import subprocess
 import yaml
 import time
 from matplotlib.backends.backend_pdf import PdfPages
-import io
+import six
 import matplotlib.patches as patches
 
 def printErrorStatistics(cself, dest=sys.stdout):
@@ -89,10 +89,10 @@ def generateReport(cself, filename="report.pdf", showOnScreen=True):
     offset = 3010
     
     #Output calibration results in text form.
-    sstream = io.StringIO()
+    sstream = six.StringIO()
     printResultTxt(cself, sstream)
     
-    text = [line for line in io.StringIO(sstream.getvalue())]
+    text = [line for line in six.StringIO(sstream.getvalue())]
     linesPerPage = 40
     
     while True:
