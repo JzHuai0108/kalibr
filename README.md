@@ -18,8 +18,10 @@ Kalibr is a toolbox that solves the following calibration problems:
 **For questions or comments, please open an issue on Github.**
 
 ## Installation
+### [<=Ubuntu 18.04 + ROS1 melodic]
+Follow instructions at [here](https://github.com/ethz-asl/kalibr/wiki/installation).
 
-### [Ubuntu 20.04](https://github.com/ethz-asl/kalibr/issues/396)
+### [Ubuntu 20.04 + ROS1 noetic](https://github.com/ethz-asl/kalibr/issues/396)
 
 ```
 sudo apt update
@@ -48,7 +50,7 @@ catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release
 catkin build -DCMAKE_BUILD_TYPE=Release -j4
 ```
 
-### Comments from ori-drs
+### Comments from authors of [ori-drs](https://github.com/ori-drs/kalibr.git)
 We've upgraded and fixed kalibr at ORI for 20.04. Please use our fork: `git clone https://github.com/ori-drs/kalibr.git --branch noetic-devel`.
 
 - Use `rosdep` to install almost all required dependencies: `rosdep install --from-paths ./ -iry`.
