@@ -143,9 +143,9 @@ class ObservationDatabase(object):
 #############################################################    
     def printTable(self):
         #header
-        print("timestamp \t", end=' ')        
+        sys.stdout.write("timestamp \t ")        
         for cam_id in range(0, self.numCameras()):
-            print("cam{0} \t".format(cam_id), end=' ')
+            sys.stdout.write("cam{0} \t ".format(cam_id))
         print()
         
         #sort for time
@@ -153,12 +153,12 @@ class ObservationDatabase(object):
         
         #data lines
         for time in times_sorted:
-            print(time, end=' ')
+            sys.stdout.write("{} ".format(time))
             for cam_id in range(0, self.numCameras()):
                 try:
                     numCorners = len(self.targetViews[time][cam_id]['observed_corners'])
                 except KeyError:
                     numCorners = "-"
-                print("\t", numCorners, end=' ')
+                sys.stdout.write("\t{} ".format(numCorners))
             print()
 

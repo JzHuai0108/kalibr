@@ -19,6 +19,8 @@ class BagImuDatasetReaderIterator(object):
         idx = next(self.iter)
         return self.dataset.getMessage(idx)
 
+    next = __next__  # Python 2
+
 class BagImuDatasetReader(object):
     def __init__(self, bagfile, imutopic, bag_from_to=None, perform_synchronization=False):
         self.bagfile = bagfile

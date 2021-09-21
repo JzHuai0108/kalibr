@@ -99,6 +99,7 @@ class VimapCsvReaderIterator(object):
     idx = next(self.iter)
     return self.dataset.getImage(idx)
 
+  next = __next__  # Python 2
 
 class VimapCsvReader(object):
     def __init__(self, folder, topic, from_to=None, perform_synchronization=False):
@@ -236,6 +237,7 @@ class VimapImuCsvReaderIterator(object):
         idx = next(self.iter)
         return self.dataset.getMessage(idx)
 
+    next = __next__  # Python 2
 
 class VimapImuCsvReader(object):
     def __init__(self, folder, topic, from_to=None, perform_synchronization=False):

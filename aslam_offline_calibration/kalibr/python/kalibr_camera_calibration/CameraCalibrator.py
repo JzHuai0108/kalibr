@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sm
 from sm import PlotCollection
 from kalibr_common import ConfigReader as cr

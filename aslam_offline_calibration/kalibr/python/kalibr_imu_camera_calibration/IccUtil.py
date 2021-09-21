@@ -1,3 +1,4 @@
+from __future__ import print_function
 from sm import PlotCollection
 from . import IccPlots as plots
 import numpy as np

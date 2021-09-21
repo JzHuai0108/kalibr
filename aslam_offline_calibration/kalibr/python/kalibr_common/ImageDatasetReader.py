@@ -24,6 +24,8 @@ class BagImageDatasetReaderIterator(object):
     idx = next(self.iter)
     return self.dataset.getImage(idx)
 
+  next = __next__  # Python 2
+
 
 class BagImageDatasetReader(object):
   def __init__(self, bagfile, imagetopic, bag_from_to=None, perform_synchronization=False):

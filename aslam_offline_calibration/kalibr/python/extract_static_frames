@@ -378,7 +378,11 @@ def main():
     cameraList = initializeCameraIntrinsics(parsed.bagfile, parsed.topics, parsed.models,
                                             parsed.target_yaml, [25, 45], parsed.showextraction, parsed.verbose)
 
-    bagtag = parsed.bagfile.translate({ord(c):None for c in "<>:/\|?*"}).replace('.bag', '', 1)
+    try:
+        regulartag = parsed.bagfile.translate({ord(c):None for c in "<>:/\|?*"})
+    except TypeError:
+        regulartag = parsed.bagfile.translate(None, "<>:/\|?*")
+    bagtag = regulartag.replace('.bag', '', 1)
     chain_yaml = "initial-camchain.yaml"
     saveCameraIntrinsics(cameraList, parsed.topics, chain_yaml)
 

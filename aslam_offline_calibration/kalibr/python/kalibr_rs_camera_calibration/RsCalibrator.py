@@ -1,4 +1,5 @@
 #encoding:UTF-8
+from __future__ import print_function
 import time
 
 import sm
@@ -719,7 +720,11 @@ class RsCalibrator(object):
 
     def __saveParametersYaml(self):
         # Create new config file
-        bagtag = self.__cameraGeometry.dataset.bagfile.translate({ord(c):None for c in "<>:/\|?*"}).replace('.bag', '', 1)
+        try:
+            regulartag = self.__cameraGeometry.dataset.bagfile.translate({ord(c):None for c in "<>:/\|?*"})
+        except TypeError:
+            regulartag = self.__cameraGeometry.dataset.bagfile.translate(None, "<>:/\|?*")
+        bagtag = regulartag.replace('.bag', '', 1)
         resultFile = "camchain-" + bagtag + ".yaml"
         chain = cr.CameraChainParameters(resultFile, createYaml=True)
         camParams = cr.CameraParameters(resultFile, createYaml=True)

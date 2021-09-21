@@ -3,6 +3,11 @@ import numpy as np
 
 
 def testRotationVector():
+    """
+    This test depends on several lines of import_rotational_kinematics_python() in 
+    kalibr/Schweizer-Messer/sm_python/src/export_rotational_kinematics.cpp, 
+    which were commented out to disable warnings.
+    """
     rvi = sm.RotationVectorImpl()
 
     rotations = []
