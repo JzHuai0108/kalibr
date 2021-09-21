@@ -52,8 +52,8 @@ void import_rotational_kinematics_python()
   RotationalKinematicsPythonWrapper<sm::kinematics::EulerAnglesZYX>::exportToPython("EulerAnglesZYX");
   RotationalKinematicsPythonWrapper<sm::kinematics::EulerAnglesYawPitchRoll>::exportToPython("EulerAnglesYawPitchRoll");
   RotationalKinematicsPythonWrapper<sm::kinematics::RotationVector>::exportToPython("RotationVector");
-  class_<sm::kinematics::RotationVector, bases<sm::kinematics::RotationalKinematics> >("RotationVectorImpl")
-    .def("rotationMatrixToParametersClassic",&sm::kinematics::RotationVector::rotationMatrixToParametersClassic)
-    .def("rotationMatrixToParametersOriginal",&sm::kinematics::RotationVector::rotationMatrixToParametersOriginal);
+  // class_<sm::kinematics::RotationVector, bases<sm::kinematics::RotationalKinematics> >("RotationVectorImpl")
+  //   .def("rotationMatrixToParametersClassic",&sm::kinematics::RotationVector::rotationMatrixToParametersClassic)
+  //   .def("rotationMatrixToParametersOriginal",&sm::kinematics::RotationVector::rotationMatrixToParametersOriginal);
   RotationalKinematicsPythonWrapper<sm::kinematics::EulerRodriguez>::exportToPython("EulerRodriguez");
 }
