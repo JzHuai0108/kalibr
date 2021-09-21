@@ -18,10 +18,10 @@ Kalibr is a toolbox that solves the following calibration problems:
 **For questions or comments, please open an issue on Github.**
 
 ## Installation
-### [<=Ubuntu 18.04 + ROS1 melodic]
-Follow instructions at [here](https://github.com/ethz-asl/kalibr/wiki/installation).
+### Ubuntu 18.04 + ROS1 melodic
+For Ubuntu <=18.04 + ROS1 <= melodic, follow instructions at [here](https://github.com/ethz-asl/kalibr/wiki/installation).
 
-### [Ubuntu 20.04 + ROS1 noetic](https://github.com/ethz-asl/kalibr/issues/396)
+### Ubuntu 20.04 + ROS1 noetic
 
 ```
 sudo apt update
@@ -50,13 +50,6 @@ catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release
 catkin build -DCMAKE_BUILD_TYPE=Release -j4
 ```
 
-### Comments from authors of [ori-drs](https://github.com/ori-drs/kalibr.git)
-We've upgraded and fixed kalibr at ORI for 20.04. Please use our fork: `git clone https://github.com/ori-drs/kalibr.git --branch noetic-devel`.
-
-- Use `rosdep` to install almost all required dependencies: `rosdep install --from-paths ./ -iry`.
-- Then install the two missing runtime dependencies: `sudo apt install python3-wxgtk4.0 python3-igraph`
-- Unittests are currently failing on 20.04 and thus deactivated on the buildserver.
-
 ### Test with IMU-camera calibration sample data
 
 ```
@@ -64,7 +57,8 @@ source ~/kalibr_ws/devel/setup.bash
 cd /path/to/kalibr_dynamic_sample
 kalibr_calibrate_imu_camera --target april_6x6.yaml --cam camchain.yaml --imu imu_adis16448.yaml --bag dynamic.bag --bag-from-to 5 45
 ```
-Also refer to [test_on_dynamic_sample](ci/test_on_dynamic_sample.sh) for shell scripts on
+
+Refer to [test_on_dynamic_sample](ci/test_on_dynamic_sample.sh) for shell scripts on
 rolling shutter camera-IMU calibration, simulation, and noise identification.
 
 ## Tutorial: IMU-camera calibration

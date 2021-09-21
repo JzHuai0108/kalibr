@@ -2,11 +2,9 @@
 This page details how to use features in this extended Kalibr version, in the order of practical value.
 * a. calibrating the spatiotemporal parameters of a rolling shutter (RS) camera - IMU system, 
 * b. simulating data of a rolling shutter camera - IMU system,
-* c. calibrating a rolling shutter camera with optional IMU data,
+* c. calibrating a rolling shutter camera with optional IMU data.
 
-
-## Install Kalibr
-Follow instructions on [Kalibr installation](https://github.com/ethz-asl/kalibr/wiki/installation).
+The corresponding bash script is [here](./ci/test_on_dynamic_sample.sh).
 
 ## Calibrate a (multiple) RS camera - IMU system
 This runs very similarly to the default global shutter (GS) [camera - IMU calibration](https://github.com/ethz-asl/kalibr/wiki/camera-imu-calibration).
@@ -162,9 +160,3 @@ These errors depend on the camera parameters which may be optimized in the kalib
 
 regularizer: asp.BSplineMotionError of aslam_nonparametric_estimation/aslam_splines/include/aslam/backend.
 ```
-
-## TODO
-Merge the uniform or nonuniform BSplines on differential manifold developed by Hannes Sommer in aslam_bsplines, see asl hand_eye_calibration.
-Use efficient derivation recursive computation approach to compute the derivatives for these diffManifoldBSplines, see Basalt.
-
-
