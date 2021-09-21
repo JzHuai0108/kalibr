@@ -146,7 +146,7 @@ class ObservationDatabase(object):
         sys.stdout.write("timestamp \t ")        
         for cam_id in range(0, self.numCameras()):
             sys.stdout.write("cam{0} \t ".format(cam_id))
-        print()
+        print("")
         
         #sort for time
         times_sorted = np.sort(list(self.targetViews.keys()))
@@ -160,5 +160,5 @@ class ObservationDatabase(object):
                 except KeyError:
                     numCorners = "-"
                 sys.stdout.write("\t{} ".format(numCorners))
-            print()
+            print("")
 

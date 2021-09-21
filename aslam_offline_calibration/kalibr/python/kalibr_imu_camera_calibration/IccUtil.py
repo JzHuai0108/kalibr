@@ -47,7 +47,7 @@ def printErrorStatistics(cself, dest=sys.stdout):
         print("Accelerometer error (imu{0}) [m/s^2]: mean {1}, median {2}, std: {3}".format(iidx, np.mean(e2), np.median(e2), np.std(e2)), file=dest)
 
 def printGravity(cself):
-    print()
+    print("")
     print("Gravity vector: (in target coordinates): [m/s^2]")
     print(cself.gravityDv.toEuclidean())
 
@@ -56,12 +56,12 @@ def printResults(cself, withCov=False):
     for camNr in range(0,nCams):
         T_cam_b = cself.CameraChain.getResultTrafoImuToCam(camNr)
 
-        print()
+        print("")
         print("Transformation T_cam{0}_imu0 (imu0 to cam{0}, T_ci): ".format(camNr))
         print(T_cam_b.T())
         cself.CameraChain.camList[camNr].printResults(cself.getEstimateParameters(), camNr)
 
-    print()
+    print("")
     for (imuNr, imu) in enumerate(cself.ImuList):
         print("IMU{0}:\n".format(imuNr), "----------------------------")
         imu.getImuConfig().printDetails()
@@ -77,7 +77,7 @@ def printBaselines(self):
             else:
                 isFixed = ""
             
-            print()
+            print("")
             print("Baseline (cam{0} to cam{1}): [m] {2}".format(camNr, camNr+1, isFixed))
             print(T.T())
             print(baseline, "[m]")
