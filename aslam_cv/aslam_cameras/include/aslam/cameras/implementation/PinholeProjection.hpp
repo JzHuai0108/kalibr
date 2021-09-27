@@ -791,6 +791,10 @@ bool PinholeProjection<DISTORTION_T>::initializeIntrinsics(const std::vector<Gri
     } else {
       std::cout << "Initialization of focal length failed. You can enable"
         << " manual input by setting 'KALIBR_MANUAL_FOCAL_LENGTH_INIT'." << std::endl;
+      std::cout << "To do so, in a bash shell, use below lines.\n";
+      std::cout << "export KALIBR_MANUAL_FOCAL_LENGTH_INIT=1\n";
+      std::cout << "# ./appname arguments <<< focal_length_in_pixels\n";
+      std::cout << "# Note replace appname, arguments, and focal length accordingly.\n";
       return false;
     }
   }
