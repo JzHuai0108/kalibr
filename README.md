@@ -38,7 +38,7 @@ then setup your sources.list and keys as instructed [here](http://wiki.ros.org/I
 ```
 mkdir ~/kalibr_ws/src
 cd ~/kalibr_ws/src
-git clone --recursive https://github.com/ori-drs/kalibr
+git clone --recursive https://github.com/JzHuai0108/kalibr
 
 cd ~/kalibr_ws
 source /opt/ros/noetic/setup.bash
