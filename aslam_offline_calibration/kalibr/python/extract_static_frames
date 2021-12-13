@@ -375,19 +375,198 @@ def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed):
     bag.close()
 
 
-def main():
+def extractCorners(bagfile, image_topics, target_yaml,
+                   bag_from_to = None, showextraction = False, verbose = False):
+    """
+
+    :param bagfile:
+    :param image_topics:
+    :param models:
+    :param target_yaml:
+    :param bag_from_to:
+    :param showextraction:
+    :param verbose:
+    :return: corner observations in frames of every camera.
+    It does not include entries for frames where corner detection fails.
+    """
+    targetConfig = kc.CalibrationTargetParameters(target_yaml)
+
+    camChainObservations = list()
+    numCams = len(image_topics)
+
+    for cam_id in range(0, numCams):
+        topic = image_topics[cam_id]
+        modelName = "pinhole-radtan" # dummy placeholder
+        print("Extracting corners for images of cam{0}:".format(cam_id))
+
+        dataset = initBagDataset(bagfile, topic, bag_from_to)
+
+        cameraModel = cameraModels[modelName]
+        cam = kcc.CameraGeometry(cameraModel, targetConfig, dataset,
+                                 verbose=(verbose or showextraction))
+
+        multithreading = not (verbose or showextraction)
+        observations = kc.extractCornersFromDataset(cam.dataset, cam.ctarget.detector,
+                                                    multithreading=multithreading, clearImages=False,
+                                                    noTransformation=True)
+        camChainObservations.append(observations)
+    return camChainObservations
+
+
+def selectStaticFramesWithOpticFlow():
+    parsed = parseArgs()
+    signal.signal(signal.SIGINT, signal_exit)
+
+    camChainObservations = extractCorners(parsed.bagfile, parsed.topics,
+                                          parsed.target_yaml, parsed.bag_from_to,
+                                          parsed.showextraction, parsed.verbose)
+
+    # compute optic flow between frames
+    flowsentinel = 1000
+    camChainOpticFlow = []
+    for camObservations in camChainObservations:
+        flowlist = []
+        lastTime = 0
+        keypoints_A = None
+        keypoints_A_id = None
+        for observation in camObservations:
+            currentTime = observation.time().toSec()
+            keypoints_B = observation.getCornersImageFrame()
+            keypoints_B_id = observation.getCornersIdx()
+            if lastTime == 0:
+                meanflow = flowsentinel
+            else:
+                dt = currentTime - lastTime
+                common_ids = set(keypoints_A_id) & set(keypoints_B_id)
+
+                if len(common_ids) > 0:
+                    commonKeypoints_A = []
+                    commonKeypoints_B = []
+                    opticflow = np.array([0, 0])
+                    for id in common_ids:
+                        commonKeypoints_A.append(keypoints_A[np.where(keypoints_A_id == id)])
+                        commonKeypoints_B.append(keypoints_B[np.where(keypoints_B_id == id)])
+
+                    for keypoint_A, keypoint_B in zip(commonKeypoints_A, commonKeypoints_B):
+                        flow = np.abs(keypoint_B - keypoint_A)
+                        opticflow = np.vstack((opticflow, flow.flatten()))
+                    meanflow = np.sum(np.mean(opticflow, 0)) / dt
+                else:
+                    meanflow = flowsentinel
+            flowlist.append(meanflow)
+
+            lastTime = currentTime
+            keypoints_A = keypoints_B
+            keypoints_A_id = keypoints_B_id
+        camChainOpticFlow.append(flowlist)
+
+    print('Detecting static frames ...')
+    # cluster frames into two groups, static and dynamic group, based on the optic flow
+    # first compute running averages in time window
+    # find the max average and min average
+    window = 1
+    halfwin = window * 0.5
+    runningAverages = []
+    assert len(camChainOpticFlow[0]) == len(camChainObservations[0])
+    for index, flow in enumerate(camChainOpticFlow[0]):  # only use the first camera
+        currentTime = camChainObservations[0][index].time().toSec()
+        leftTime = currentTime - halfwin
+        rightTime = currentTime + halfwin
+        time = currentTime
+        id = index
+        flowInWindow = []
+        while time > leftTime and id > 0:
+            flowInWindow.append(camChainOpticFlow[0][id])
+            id = id - 1
+            time = camChainObservations[0][id].time().toSec()
+
+        id = index + 1
+        if id == len(camChainObservations[0]):
+            pass
+        else:
+            time = camChainObservations[0][id].time().toSec()
+            while time < rightTime and id < len(camChainOpticFlow[0]) - 1:
+                flowInWindow.append(camChainOpticFlow[0][id])
+                id = id + 1
+                time = camChainObservations[0][id].time().toSec()
+        runningAverages.append(np.mean(flowInWindow))
+    assert len(camChainOpticFlow[0]) == len(runningAverages)
+    minFlowInWindow = np.min(runningAverages)
+    maxFlowInWindow = np.max(runningAverages)
+    print('Running average flow in window: min {} max {} px/s.'.format(minFlowInWindow, maxFlowInWindow))
+
+    # mark the frame whose optic flow is minimum in a window and less than tolerance
+    flowTol = minFlowInWindow * 2
+    print('Standstill tolerance optic flow {:.3f} px/s.'.format(flowTol))
+    staticStatus = []
+    staticCount = 0
+    for index, flow in enumerate(camChainOpticFlow[0]):
+        currentTime = camChainObservations[0][index].time().toSec()
+        leftTime = currentTime - halfwin
+        rightTime = currentTime + halfwin
+        time = currentTime
+        id = index
+        flowInWindow = []
+        while time > leftTime and id > 0:
+            flowInWindow.append(camChainOpticFlow[0][id])
+            id = id - 1
+            time = camChainObservations[0][id].time().toSec()
+        id = index + 1
+        if id == len(camChainObservations[0]):
+            pass
+        else:
+            time = camChainObservations[0][id].time().toSec()
+            while time < rightTime and id < len(camChainOpticFlow[0]) - 1:
+                flowInWindow.append(camChainOpticFlow[0][id])
+                id = id + 1
+                time = camChainObservations[0][id].time().toSec()
+        currentFlow = camChainOpticFlow[0][index]
+        if currentFlow == np.min(flowInWindow) and currentFlow < flowTol:
+            staticStatus.append(True)
+            staticCount += 1
+        else:
+            staticStatus.append(False)
+    assert len(camChainOpticFlow[0]) == len(staticStatus)
+
+
+    # select and save the static images
+    imageDatasetReader = initBagDataset(parsed.bagfile, parsed.topics[0], parsed.bag_from_to)
+    bag = rosbag.Bag(parsed.output_bag, 'w')
+    imageLog = os.path.join(os.path.dirname(parsed.output_bag), "selected_frame_time.log")
+    timeStream = open(imageLog, 'w')
+
+    imageCount = 0
+    staticIndex = 0
+    while staticStatus[staticIndex] is False:
+        staticIndex += 1
+    for idx in imageDatasetReader.indices:
+        topic, data, stamp = imageDatasetReader.bag._read_message(imageDatasetReader.index[idx].position)
+        frameTime = acv.Time(data.header.stamp.secs, data.header.stamp.nsecs)
+        if frameTime == camChainObservations[0][staticIndex].time():
+            bag.write(topic, data, stamp)
+            print("Saved frame at {}.".format(frameTime.toSec()))
+            timeStream.write('{} {:.9f}\n'.format(imageCount, frameTime.toSec()))
+            imageCount += 1
+            assert staticStatus[staticIndex]
+            staticIndex += 1
+            while staticIndex < len(staticStatus) and staticStatus[staticIndex] is False:
+                staticIndex += 1
+            if staticIndex == len(staticStatus):
+                break
+
+    print('Saved {} static frames out of {} frames!'.format(imageCount, len(imageDatasetReader.indices)))
+    bag.close()
+
+
+def selectStaticFramesWithImu():
     parsed = parseArgs()
 
     signal.signal(signal.SIGINT, signal_exit)
 
     cameraList = initializeCameraIntrinsics(parsed.bagfile, parsed.topics, parsed.models,
-                                            parsed.target_yaml, [25, 45], parsed.showextraction, parsed.verbose)
+                                            parsed.target_yaml, parsed.bag_from_to,
+                                            parsed.showextraction, parsed.verbose)
 
-    try:
-        regulartag = parsed.bagfile.translate({ord(c):None for c in "<>:/\|?*"})
-    except TypeError:
-        regulartag = parsed.bagfile.translate(None, "<>:/\|?*")
-    bagtag = regulartag.replace('.bag', '', 1)
     chain_yaml = "initial-camchain.yaml"
     saveCameraIntrinsics(cameraList, parsed.topics, chain_yaml)
 
@@ -402,4 +581,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    selectStaticFramesWithOpticFlow()
