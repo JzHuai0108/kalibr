@@ -14,6 +14,7 @@ import numpy as np
 
 import rosbag
 
+import aslam_cv as acv
 import aslam_cv_backend as acvb
 import kalibr_common as kc
 from kalibr_common import ConfigReader as cr
@@ -21,12 +22,13 @@ import kalibr_camera_calibration as kcc
 from kalibr_imu_camera_calibration import sens, BSplineIO, IccCalibratorConfiguration, IccCalibrator
 import sm
 
+
 def parseArgs():
     parser = argparse.ArgumentParser()
     groupData = parser.add_argument_group('Dataset source')
     groupData.add_argument('bagfile', help='Ros bag file containing image and imu data (rostopics specified in the yamls)')
     parser.add_argument('--models', nargs='+', dest='models',
-                        help='The camera model {0} to estimate'.format(cameraModels.keys()), required=True)
+                        help='The camera model {0} to estimate'.format(cameraModels.keys()))
 
     groupData.add_argument('--bag-from-to', metavar='bag_from_to', type=float, nargs=2,
                            help='Use the bag data starting from up to this time [s]')
@@ -62,12 +64,14 @@ def parseArgs():
         sys.exit(2)
     return parser.parse_args()
 
+
 def initBagDataset(bagfile, topic, from_to):
     print("\tDataset:          {0}".format(bagfile))
     print("\tTopic:            {0}".format(topic))
     reader = kc.BagImageDatasetReader(bagfile, topic, bag_from_to=from_to)
     print("\tNumber of images: {0}".format(reader.numImages()))
     return reader
+
 
 #available models
 cameraModels = { 'pinhole-radtan': acvb.DistortedPinhole,
@@ -77,6 +81,7 @@ cameraModels = { 'pinhole-radtan': acvb.DistortedPinhole,
                  'omni-radtan':    acvb.DistortedOmni,
                  'eucm-none':      acvb.ExtendedUnified,
                  'ds-none':        acvb.DoubleSphere}
+
 
 def signal_exit(signal, frame):
     sm.logWarn("Shutdown requested! (CTRL+C)")
@@ -226,7 +231,7 @@ def fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated"
 
     parsed.extractionstepping = False
 
-    camChain = sens.IccCameraChain(chain, targetConfig, parsed)
+    camChain = sens.IccCameraChain(chain, targetConfig, parsed) # Also extract target corners.
     config = IccCalibratorConfiguration()
     config.estimateParameters['timeOffset'] = True
     config.estimateParameters['chainExtrinsics'] = False
@@ -244,7 +249,7 @@ def fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated"
         if imu is not imus[0]:
             imu.findOrientationPrior(imus[0])
 
-    print("Building the problem")
+    print("Initializing the trajectory B splines from the poses of camera observations ...")
     iCal.buildProblem(splineOrder=6,
                       poseKnotsPerSecond=100,
                       biasKnotsPerSecond=50,
