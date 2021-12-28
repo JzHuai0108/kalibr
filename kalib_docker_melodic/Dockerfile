@@ -1,6 +1,5 @@
 # Install ROS 
 FROM osrf/ros:melodic-desktop-bionic
-# FROM my-melodic-docker
 
 #(Ubuntu 16.04: xenial, Ubuntu 14.04: trusty, Ubuntu 18.04: bionic)
 ENV UBUNTU_VERSION=bionic
@@ -38,7 +37,9 @@ RUN apt-get update && apt-get install -y \
         python-catkin-tools \
         libv4l-dev \
         wget \
-        autoconf automake 
+        autoconf automake \
+	libsuitesparse-dev  \
+	python-tk
 
 ENV KALIBR_WORKSPACE /kalibr_workspace
 
@@ -50,9 +51,6 @@ RUN 	mkdir -p $KALIBR_WORKSPACE/src &&\
 
 RUN 	cd $KALIBR_WORKSPACE/src &&\
 	git clone https://github.com/JzHuai0108/kalibr
-        # git clone https://github.com/ethz-asl/kalibr.git
-
-RUN apt-get install -y libsuitesparse-dev  python-tk
 
 RUN	cd $KALIBR_WORKSPACE &&\
 	catkin build -DCMAKE_BUILD_TYPE=Release -j4
