@@ -36,14 +36,6 @@ kalibr_calibrate_imu_camera --target $datadir/april_6x6.yaml --cam $datadir/camc
   --bag $datadir/dynamic.bag --bag-from-to 5 45 --dont-show-report
 cd ..
 
-echo "Calibrate imu-camera system with GS model and estimate-line-delay enabled..."
-sed -i "/line_delay_nanoseconds/c\  line_delay_nanoseconds: 0" $datadir/camchain.yaml
-mkdir -p gs_est_line_delay
-cd gs_est_line_delay
-kalibr_calibrate_imu_camera --target $datadir/april_6x6.yaml --cam $datadir/camchain.yaml --imu $datadir/imu_adis16448.yaml \
-  --bag $datadir/dynamic.bag --bag-from-to 5 45 --estimate-line-delay --dont-show-report
-cd ..
-
 echo "Calibrate imu-camera system with RS model..."
 sed -i "/line_delay_nanoseconds/c\  line_delay_nanoseconds: 5000" $datadir/camchain.yaml
 mkdir -p rs
