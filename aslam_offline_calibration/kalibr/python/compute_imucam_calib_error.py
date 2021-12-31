@@ -24,7 +24,7 @@ def replace_all(text, dic):
 def parseMeanMedianStd(line):
     index = line.find('mean')
     numberline = line[index + len('mean'):]
-    dict = {'median': '', 'std': '', ':': ' ', ',': ' '}
+    dict = {'median': '', 'std': '', ':': ' ', ',': ' ', '#terms': ''}
     clearline = replace_all(numberline, dict)
     numbers = clearline.split()
     return map(float, numbers)

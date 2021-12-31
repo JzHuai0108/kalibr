@@ -794,7 +794,8 @@ bool PinholeProjection<DISTORTION_T>::initializeIntrinsics(const std::vector<Gri
       std::cout << "To do so, in a bash shell, use below lines.\n";
       std::cout << "export KALIBR_MANUAL_FOCAL_LENGTH_INIT=1\n";
       std::cout << "# ./appname arguments <<< focal_length_in_pixels\n";
-      std::cout << "# Note replace appname, arguments, and focal length accordingly.\n";
+      std::cout << "# Note that replace appname, arguments, and focal length accordingly.\n";
+      std::cout << "For instance, appname can be kalibr_calibrate_imu_camera.\n";
       return false;
     }
   }

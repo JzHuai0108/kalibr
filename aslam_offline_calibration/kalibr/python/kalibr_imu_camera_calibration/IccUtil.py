@@ -17,7 +17,8 @@ def printErrorStatistics(cself, dest=sys.stdout):
     for cidx, cam in enumerate(cself.CameraChain.camList):
         if len(cam.allReprojectionErrors)>0:
             e2 = np.array([ np.sqrt(rerr.evaluateError()) for reprojectionErrors in cam.allReprojectionErrors for rerr in reprojectionErrors])
-            print("Reprojection error (cam{0}):     mean {1}, median {2}, std: {3}".format(cidx, np.mean(e2), np.median(e2), np.std(e2) ), file=dest)
+            print("Reprojection error (cam{0}):     mean {1}, median {2}, std: {3}, #terms: {4}".format(
+                cidx, np.mean(e2), np.median(e2), np.std(e2), len(e2)), file=dest)
         else:
             print("Reprojection error (cam{0}):     no corners".format(cidx), file=dest)
     
@@ -34,7 +35,8 @@ def printErrorStatistics(cself, dest=sys.stdout):
     for cidx, cam in enumerate(cself.CameraChain.camList):
         if len(cam.allReprojectionErrors)>0:
             e2 = np.array([ np.linalg.norm(rerr.error()) for reprojectionErrors in cam.allReprojectionErrors for rerr in reprojectionErrors])
-            print("Reprojection error (cam{0}) [px]:     mean {1}, median {2}, std: {3}".format(cidx, np.mean(e2), np.median(e2), np.std(e2) ), file=dest)
+            print("Reprojection error (cam{0}) [px]:     mean {1}, median {2}, std: {3}, #terms: {4}".format(
+                cidx, np.mean(e2), np.median(e2), np.std(e2), len(e2)), file=dest)
         else:
             print("Reprojection error (cam{0}) [px]:     no corners".format(cidx), file=dest)
     

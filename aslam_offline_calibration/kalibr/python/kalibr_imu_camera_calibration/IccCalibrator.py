@@ -300,8 +300,8 @@ class IccCalibrator(object):
                 stats[camName]['image_noise_std_dev'] = camNoise
                 cov = np.matmul(rawErrors.transpose(), rawErrors) / rawErrors.shape[0]
                 stats[camName]['image_noise_cov'] = cov
-                print("Reprojection error (cam{0}) [px]: mean {1}, median {2}, std: {3}, cov: {4}".format(
-                        cidx, np.mean(rawErrors, 0), np.median(rawErrors, 0), camNoise, cov))
+                print("Reprojection error (cam{0}) [px]: mean {1}, median {2}, std: {3}, cov: {4}, #terms: {5}".format(
+                        cidx, np.mean(rawErrors, 0), np.median(rawErrors, 0), camNoise, cov, len(rawErrors)))
             else:
                 print("Reprojection error (cam{0}) [px]:     no corners".format(cidx))
 
