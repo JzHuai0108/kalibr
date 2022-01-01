@@ -604,6 +604,7 @@ class IccCamera():
         # 1. Naive approach to reproject landmarks with double numbers.
         frame = self.camera.frameType()
         frame.setGeometry(self.camera.geometry)
+        frame.setTime(acv.Time(frameTimeScalar))
         R = np.eye(2) * self.cornerUncertainty * self.cornerUncertainty
         invR = np.linalg.inv(R)
         for pidx in range(0,imageCornerPoints.shape[0]):
@@ -618,7 +619,10 @@ class IccCamera():
         for pidx in range(0,imageCornerPoints.shape[0]):
             targetPoint = np.insert(targetCornerPoints[pidx], 3, 1)
             p = T_c_w *  aopt.HomogeneousExpression(targetPoint)
-            rerr = error_t(frame, pidx, p)
+            if self.isRollingShutter():
+                rerr = error_t(frame, pidx, p, self.camera.dv, poseSplineDv)
+            else:
+                rerr = error_t(frame, pidx, p, self.camera.dv)
             rerr.evaluateError()
             predictedMeas = imageCornerPoints[pidx, :].T - rerr.error()
             # We have to subtract error to get the prediction because getPredictedMeasurement is not exposed 
