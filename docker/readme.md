@@ -5,6 +5,7 @@ BUILD docker:
      "./build.sh"
 
 RUN docker:
+reference resources: https://github.com/ethz-asl/kalibr/wiki/installation
 1. Give the script execution permissions by running: 
     "chmod +x run.sh".
 
@@ -16,3 +17,7 @@ RUN docker:
     "/root/data". 
  The shell has the Kalibr workspace loaded. This means you can run your favorite Kalibr commands such as: 
     "kalibr_calibrate_cameras --bag bag.bag --topics /cam_node/left_raw /cam_node/right_raw --models pinhole-radtan pinhole-radtan --target target.yaml"
+
+4. Multi terminal: open a new terminal and running: 
+"docker exec -it dockerID /bin/bash"
+

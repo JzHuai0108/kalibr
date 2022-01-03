@@ -54,5 +54,3 @@ RUN 	cd $KALIBR_WORKSPACE/src &&\
 
 RUN	cd $KALIBR_WORKSPACE &&\
 	catkin build -DCMAKE_BUILD_TYPE=Release -j4
-
-COPY ros_entrypoint.sh /ros_entrypoint.sh
