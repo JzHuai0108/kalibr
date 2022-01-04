@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t melodic-kalib-docker -f ./Dockerfile .
+docker build -t kalibr:melodic -f ./Dockerfile .

@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t noetic-kalib-docker -f ./Dockerfile .
+docker build -t kalibr:noetic -f ./Dockerfile .

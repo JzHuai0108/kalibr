@@ -62,7 +62,7 @@ Here we focus on the former three tasks.
 
 ### Ubuntu 18.04 + ROS1 melodic
 For Ubuntu <=18.04 + ROS1 <= melodic, follow instructions at [here](https://github.com/ethz-asl/kalibr/wiki/installation).
-This installation procedure can be greatly simplified by using the provided [Dockerfile](./docker/Dockerfile), see the [Docker](#docker) section.
+This installation procedure can be greatly simplified by using the provided Dockerfiles, see the [Docker](#docker) section.
 
 ### Ubuntu 20.04 + ROS1 noetic
 
@@ -164,19 +164,38 @@ Of course, this requires the [docker engine](https://docs.docker.com/engine/inst
 
 To start a docker container where the kalibr can run, we need a docker image which is its blueprint.
 The docker image can be created by building the provided dockerfile.
+The below commands assume that the ROS1 melodic docker image will be created and used, 
+replace melodic with noetic if a ROS1 noetic docker image is desired.
+```
+cd kalibr/docker/melodic
+chmod +x build.sh
+./build.sh
+```
+To confirm that the docker image is created successfully, list the existing docker images by
+```
+docker images
+```
+Then we can start a docker container from the image and run Kalibr.
+
 ```
 cd kalibr/docker
-sudo docker build -t ros-kalibr:melodic .
+chmod +x run.sh
+./run.sh <folder-of-rosbag> melodic 1
+
 ```
-The resulting docker image can be shown by
+Note that folder-of-rosbag is the folder on the host computer containing the data bag for calibration.
+The run.sh step mounts folder-of-rosbag to /root/data in the docker container, and 
+opens an interactive shell session with the Kalibr workspace loaded in the container.
+Then in the interactive shell, you may run the calibration commands like
 ```
-sudo docker image ls
+kalibr_calibrate_imu_camera --target april_6x6.yaml --cam camchain.yaml --imu imu_adis16448.yaml \
+ --bag dynamic.bag --bag-from-to 5 45 --estimate-line-delay --dont-show-report
 ```
-Then we can start a docker container from the image and run Kalibr with the [camera-IMU calibration sample data](https://drive.google.com/file/d/0B0T1sizOvRsUcGpTWUNTRC14RzA/edit?usp=sharing) to see the effect of rolling shutter camera-IMU calibration.
+For some tasks, you may want to open extra shell sessions for the container by 
 ```
-docker run -it --rm -v /kalibr_data:/data \
-  --user 0 --cpuset-cpus="0-3" ros-kalibr:melodic
-# run kalibr
+docker exec -it <CONTAINER ID> /bin/bash
+# CONTAINER ID can be found by 
+docker ps
 ```
 
 ## A crash course on calibration with B-splines
