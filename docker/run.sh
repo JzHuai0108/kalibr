@@ -20,7 +20,7 @@ fi
 # Explanations of arguments to the below commands are given in 
 # https://stackoverflow.com/questions/43015536/xhost-command-for-docker-gui-apps-eclipse
 if [ "$3" = "0" ]; then
-  docker run -it -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v $data_dir:/root/data kalibr:$dros_distro /bin/bash -c "cd /root/data; /bin/bash"
+  docker run -it -v $data_dir:/root/data kalibr:$dros_distro /bin/bash -c "cd /root/data; /bin/bash"
 else
   xhost +local:root;
   docker run -it -e DISPLAY -e QT_X11_NO_MITSHM=1 -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v $data_dir:/root/data kalibr:$dros_distro /bin/bash -c "cd /root/data; /bin/bash"
