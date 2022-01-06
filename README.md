@@ -22,7 +22,8 @@
   - [kalibr_calibrate_rs_cameras](#kalibr_calibrate_rs_cameras)
     - [Design variables](#design-variables-1)
     - [Error terms](#error-terms-1)
-- [Reference](#reference)
+- [Citing](#citing)
+- [Compiled rolling shutter parameters for consumer products](#compiled-rolling-shutter-parameters-for-consumer-products)
 - [TODOs](#todos)
 
 ## Introduction
@@ -62,6 +63,11 @@ Here we focus on the former three tasks.
 
 ### Ubuntu 18.04 + ROS1 melodic
 For Ubuntu <=18.04 + ROS1 <= melodic, follow instructions at [here](https://github.com/ethz-asl/kalibr/wiki/installation).
+In addition, install suitesparse by
+```
+sudo apt-get install libsuitesparse-dev
+```
+because this fork uses the system wide suitesparse whereas the original Kalibr builds suitesparse in the Kalibr workspace.
 This installation procedure can be greatly simplified by using the provided Dockerfiles, see the [Docker](#docker) section.
 
 ### Ubuntu 20.04 + ROS1 noetic
@@ -276,7 +282,7 @@ These errors depend on the camera parameters which may be optimized in the kalib
 
 regularizer: asp.BSplineMotionError of aslam_nonparametric_estimation/aslam_splines/include/aslam/backend.
 
-## Reference
+## Citing
 More information about RS camera-IMU calibration and simulation can be found
 at the [report](https://arxiv.org/abs/2108.07200).
 If you find the extension useful, please consider citing it.
@@ -297,6 +303,11 @@ If you find the extension useful, please consider citing it.
   archiveprefix = {arXiv}
 }
 ```
+
+## Compiled rolling shutter parameters for consumer products
+We have gathered rolling shutter parameters for consumer cameras from a variety of sources, and have calibrated such parameters for consumer cameras by a LED panel.
+These parameters are provided [here](doc/rolling-shutter-table.md) for reference.
+
 
 ## TODOs
 * Support calibrating cameras of FOV >= 180 degrees with the equidistant model.
