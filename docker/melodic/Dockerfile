@@ -55,4 +55,5 @@ RUN 	cd $KALIBR_WORKSPACE/src &&\
 RUN	cd $KALIBR_WORKSPACE &&\
 	catkin build -DCMAKE_BUILD_TYPE=Release -j4
 
+# https://answers.ros.org/question/356401/is-ros-already-sourced-if-i-do-it-from-a-dockerfile/
 COPY ros_entrypoint.sh /ros_entrypoint.sh
