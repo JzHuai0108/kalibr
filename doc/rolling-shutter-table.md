@@ -5,7 +5,7 @@
 Note that frame readout time = image height * line delay.
 
 | Camera      | Resolution  | Frame rate | Mean frame readout time* | Frame readout time standard deviation | #Estimates |
-| - | - | - | - | - | - | - | - |
+| - | - | - | - | - | - |
 | name and identifier | px x px | Hz | millisecond | millisecond | 1 |
 |iPhone 3GS | 640 x 480 | 30 | 30.84 | 0.36 | 7 |
 |iPhone 4(#1) | 1280 × 720 | 30 | 31.98 | 0.25 | 6 |
@@ -27,7 +27,7 @@ For the full list, please refer to [2].
 Note that rolling shutter amount = frame readout time * frame rate.
 
 | Camera      | Resolution  | Frame rate | Rolling shutter amount | Rolling shutter amount std. dev. | Mean frame readout time* | Frame readout time std. dev. |
-| - | - | - | - | - | - | - | - | - |
+| - | - | - | - | - | - | - |
 | name and identifier | px x px | Hz | 0.01 | 0.01 | millisecond | millisecond |
 GoPro Hero3+ Black Edition, wide FOV | 1920x1080 | 60 |  88.89 | |14.82 | |
 GoPro Hero3+ Black Edition, narrow FOV | 1920x1080 | 60 | 86.05| |14.34 | |
@@ -41,7 +41,7 @@ Samsung Galaxy S3|1920x1080|30|90|1|30.00|0.33
 ### Table 3 The readout times estimated by moving the camera by hand in front of a checkboard, copied from [3].
 
 | Camera      | Resolution  | Frame rate | Mean line delay | Line delay std. dev. | Mean frame readout time* | Frame readout time std. dev. | #Estimates |
-| - | - | - | - | - | - | - | - | - | - |
+| - | - | - | - | - | - | - | - |
 | name and identifier | px x px | Hz | 0.01 | 0.01 | millisecond | millisecond | 1 |
 iPhone3GS|640x480|30|64.41|0.11|30.92|0.05|5
 iPhone4S|1920x1080|30|24.12|0.52|26.05|0.56|12
