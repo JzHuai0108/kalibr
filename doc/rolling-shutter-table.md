@@ -4,7 +4,7 @@
 
 Note that frame readout time = image height * line delay.
 
-| Camera      | Resolution  | Frame rate | Mean frame readout time* | Frame readout time standard deviation | #Estimates |
+| Camera      | Resolution  | Frame rate | Mean frame readout time | Frame readout time standard deviation | #Estimates |
 | - | - | - | - | - | - |
 | name and identifier | px x px | Hz | millisecond | millisecond | 1 |
 |iPhone 3GS | 640 x 480 | 30 | 30.84 | 0.36 | 7 |
@@ -47,7 +47,17 @@ iPhone3GS|640x480|30|64.41|0.11|30.92|0.05|5
 iPhone4S|1920x1080|30|24.12|0.52|26.05|0.56|12
 Galaxy S3|1920x1080|30|30.25|0.68|32.67|0.73|7
 
-### Table 4 The readout time estimated by a LED panel.
+### Table 4 The readout times for drone cameras, copied from [4].
+
+|Drone|Camera|Resolution (px x px)|Shutter type|Sensor|Lens|Horizontal / vertical field of view (deg)|Estimated readout time (ms)
+|-|-|-|-|-|-|-|-
+|DJI Phantom 2 Vision+|FC200|4384x3288|rolling|1/2.3” CMOS|fisheye|110/80|74
+DJI Inspire 1|FC300X|4000x3000|rolling|1/2.3” CMOS|perspective|85/70|30
+3DR Solo|GoPro 4 Black|4000x3000|rolling|1/2.3” CMOS|fisheye|125/95|30
+senseFly eBee|Canon S110|4000x3000|global|1/1.7” CMOS|perspective|71/56|0
+
+
+### Table 5 The readout time estimated by a LED panel.
 | Camera      | Resolution  | Frame rate | Mean line delay | Line delay std. dev. | Nominal frame readout time | Mean frame readout time* | Frame readout time std. dev. | #Estimates |
 | - | - | - | - | - | - | - | - | - |
 | name and identifier | px x px | Hz | microsecond | microsecond | millisecond | millisecond | millisecond | 1 |
@@ -63,3 +73,5 @@ Zenfone AR|1280x720| 26 | 10.3|0.43|5.469|7.42|0.31|100
 [2] G. Thalin, Deshaker video stabilizer plugin v2.5 for VirtualDub, 2010. http://www.guthspot.se/video/deshaker.htm
 
 [3] L. Oth, P. Furgale, L. Kneip and R. Siegwart, "Rolling Shutter Camera Calibration," 2013 IEEE Conference on Computer Vision and Pattern Recognition, 2013, pp. 1360-1367, doi: 10.1109/CVPR.2013.179.
+
+[4] J. Vautherin, S. Rutishauser, K. Schneider-Zapp, H. F. Choi, V. Chovancova, A. Glass, and C. Strecha, "Photogrammetric accuracy and modeling of rolling shutter cameras," ISPRS Annals of Photogrammetry, Remote Sensing & Spatial Information Sciences, 3(3), 2016.
