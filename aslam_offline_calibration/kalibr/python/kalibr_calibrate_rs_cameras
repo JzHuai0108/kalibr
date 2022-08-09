@@ -24,10 +24,11 @@ import time
 
 np.set_printoptions(suppress=True)
 
-def __initBagDataset(bagfile, topic, from_to):
+def __initBagDataset(bagfile, topic, from_to, perform_syncrhronization):
     print("\tDataset:          {0}".format(bagfile))
     print("\tTopic:            {0}".format(topic))
-    reader = kc.BagImageDatasetReader(bagfile, topic, bag_from_to=from_to)
+    reader = kc.BagImageDatasetReader(bagfile, topic, bag_from_to=from_to,
+                                      perform_synchronization=perform_syncrhronization)
     print("\tNumber of images: {0}".format(reader.numImages()))
     return reader
 
@@ -115,6 +116,7 @@ def __parseArgs():
     groupCam = parser.add_argument_group('Camera system configuration')
     groupCam.add_argument('--cams', dest='chain_yaml', help=('Camera system configuration as yaml file.\n'
         'If camera yaml is provided, then values from the yaml will be used for initializing the camera'), required=False)
+    # TODO(jhuai): Currently the optimization with IMU data does not converge at all.
     groupImu = parser.add_argument_group('IMU configuration')
     groupImu.add_argument('--imu', dest='imu_yaml', help=('Yaml holding the IMU noise parameters.'
             ' Thanks to the ConfigReader, no hierarchy should be used in the yaml.'))
@@ -186,7 +188,7 @@ def main():
     ## load bagfile and extract targets:
     targetConfig = kc.CalibrationTargetParameters(parsed.targetYaml)
     if parsed.bagfile.endswith('.bag'):
-        dataset = __initBagDataset(parsed.bagfile, parsed.topic, parsed.bag_from_to)
+        dataset = __initBagDataset(parsed.bagfile, parsed.topic, parsed.bag_from_to, parsed.perform_synchronization)
     else:
         dataset = kc.VimapCsvReader(parsed.bagfile, parsed.topic, parsed.bag_from_to, False)
 

@@ -26,33 +26,20 @@ import sm
 def parseArgs():
     parser = argparse.ArgumentParser()
     groupData = parser.add_argument_group('Dataset source')
-    groupData.add_argument('bagfile', help='Ros bag file containing image and imu data (rostopics specified in the yamls)')
+    groupData.add_argument('bagfile', help='Ros bag file containing images')
     parser.add_argument('--models', nargs='+', dest='models',
                         help='The camera model {0} to estimate'.format(cameraModels.keys()))
-
     groupData.add_argument('--bag-from-to', metavar='bag_from_to', type=float, nargs=2,
                            help='Use the bag data starting from up to this time [s]')
-    # groupData.add_argument('--perform-synchronization', action='store_true', dest='perform_synchronization',
-    #                        help='Perform a clock synchronization according to \'Clock synchronization algorithms for '
-    #                             'network measurements\' by Zhang et al. (2002).')
     parser.add_argument('--topics', nargs='+', type=str, default=["/cam0/image_raw"], dest='topics',
                         help='The image topics within the input rosbag')
-    parser.add_argument('--imu-topic', type=str, default="/imu0", dest='imu_topic',
-                        help='The IMU topic of the input rosbag')
 
     groupTarget = parser.add_argument_group('Calibration target')
     groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file')
 
     groupOpt = parser.add_argument_group('Selection options')
-
-    groupOpt.add_argument('--max_accel_std', type=float, default=0.4,
-                          help='Maximum variance of the acceleration %(default)s)')
-    groupOpt.add_argument('--max_omega_std', type=float, default=0.2,
-                          help='Maximum variance of angular rate %(default)s)')
     groupOpt.add_argument('--window', type=float, default=1.0,
-                          help='window size to compute variance in seconds %(default)s)')
-    groupOpt.add_argument('--delta_var_omega_tol', type=float, default=0.1,
-                          help='The variance has to be close to the minimum variance in its window by this value %(default)s)')
+                          help='window size to compute variance, in seconds %(default)s)')
 
     outputSettings = parser.add_argument_group('Output options')
     outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Enable (really) verbose output (disables plots)')
@@ -178,94 +165,6 @@ def saveCameraIntrinsics(cameraList, imageTopics, resultFile):
     chain.writeYaml()
 
 
-def fakeImuYaml(imu_yaml):
-    with open(imu_yaml, 'w') as stream:
-        stream.write("  T_i_b:\n  - [1.0, 0.0, 0.0, 0.0]\n  - [0.0, 1.0, 0.0, 0.0]\n  - [0.0, 0.0, 1.0, 0.0]\n  - [0.0, 0.0, 0.0, 1.0]\n")
-        stream.write("  accelerometer_noise_density: 0.01\n  accelerometer_random_walk: 0.0002\n  gyroscope_noise_density: 0.005\n")
-        stream.write("  gyroscope_random_walk: 4.0e-06\n  model: calibrated\n  rostopic: /imu0\n  time_offset: 0.0\n")
-        stream.write("  update_rate: 200.0\n  gravity_in_target: [0.0, -9.81, 0.0]\n  initial_gyro_bias: [0.0, 0.0, 0.0]\n")
-        stream.write("  initial_accelerometer_bias: [0.0, 0.0, 0.0]\n")
-
-
-def fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated"):
-    """
-    compute camera poses using detected corners in the aprilgrid and the initialized camera intrinsics.
-    Then a pose bspline will be initialized from the camera poses. Also a gyro bias bspline and an accelerometer bias
-    bspline will be initialized.
-    At last these bsplines will be saved along with the predicted IMU readings from the pose bspline.
-    The saved pose B spline and IMU readings are in the IMU clock and IMU frame.
-    :param parsed:
-    :param chain_yaml: contains camera intrinsics
-    :param imu_yaml:
-    :param imu_model:
-    :return:
-    """
-    if parsed.verbose:
-        sm.setLoggingLevel(sm.LoggingLevel.Debug)
-    else:
-        sm.setLoggingLevel(sm.LoggingLevel.Info)
-
-    imus = list()
-    print("Initializing IMU")
-    imuConfig = kc.ImuParameters(imu_yaml)
-    imuConfig.printDetails()
-    if imu_model == 'calibrated':
-        imus.append(sens.IccImu(imuConfig, parsed, isReferenceImu=(not imus),
-                                estimateTimedelay=False))
-    else:
-        sm.logError("Model {0} is currently unsupported.".format(imu_model))
-        sys.exit(2)
-
-    if parsed.target_yaml:
-        # load calibration target configuration
-        targetConfig = kc.CalibrationTargetParameters(parsed.target_yaml)
-
-        print("Initializing calibration target:")
-        targetConfig.printDetails()
-    else:
-        targetConfig = None
-
-    print("Initializing camera chain:")
-    chain = kc.CameraChainParameters(chain_yaml)
-    chain.printDetails()
-
-    parsed.extractionstepping = False
-
-    camChain = sens.IccCameraChain(chain, targetConfig, parsed) # Also extract target corners.
-    config = IccCalibratorConfiguration()
-    config.estimateParameters['timeOffset'] = True
-    config.estimateParameters['chainExtrinsics'] = False
-    config.estimateParameters['shutter'] = False
-    config.estimateParameters['intrinsics'] = False
-    config.estimateParameters['distortion'] = False
-
-    # create a calibrator instance
-    iCal = IccCalibrator(config)
-
-    # register sensors with calibrator
-    iCal.registerCamChain(camChain)
-    for imu in imus:
-        iCal.registerImu(imu)
-        if imu is not imus[0]:
-            imu.findOrientationPrior(imus[0])
-
-    print("Initializing the trajectory B splines from the poses of camera observations ...")
-    iCal.buildProblem(splineOrder=6,
-                      poseKnotsPerSecond=100,
-                      biasKnotsPerSecond=50,
-                      doPoseMotionError=False,
-                      doBiasMotionError=True,
-                      blakeZisserCam=-1,
-                      huberAccel=-1,
-                      huberGyro=-1,
-                      verbose=parsed.verbose)
-
-    imu_file = "imu_check.txt"
-    predictedImuArray = BSplineIO.saveImuMeasurementsFromPoseBSpline(iCal, imu_file)
-    baseCamera = iCal.CameraChain.camList[0]
-    return baseCamera, predictedImuArray, iCal.ImuList[0].imuData
-
-
 def atArrayMinimum(array, dataColumn, checkRow, halfWindow, tol):
     startIndex = max(0, checkRow - halfWindow)
     finishIndex = min(checkRow + halfWindow, array.shape[0])
@@ -274,105 +173,6 @@ def atArrayMinimum(array, dataColumn, checkRow, halfWindow, tol):
         return True
     else:
         return False
-
-
-def selectStaticFrames(baseCamera, predictedImuDataArray, imuData, parsed):
-    """
-
-    :param baseCamera: The single camera.
-    :param predictedImuDataArray: numpy array [time in secs, omega, alpha]
-    :param imuData: list of Imu Measurements
-    :param parsed:
-    :param windowDuration: duration of the window for computing running variances.
-    :param omegaTol: In the running variance array of omega, if the variance at the image timestamp is
-        smaller than parsed.max_omega_std and is within tol of the minimum in the sliding window, then the frame will be
-        chosen as a static frame. The larger tol is, the more frames will be selected.
-    :return:
-    """
-    outputBag = parsed.output_bag
-    syncedImageLog = os.path.join(os.path.dirname(outputBag), "selected_frame_imu_time.log")
-    syncedTimeStream = open(syncedImageLog, 'w')
-
-    imageDatasetReader = baseCamera.dataset
-    imageTimes = [obs.time().toSec() for obs in baseCamera.targetObservations]
-    imageInterval = np.median(np.diff(imageTimes))
-
-    imuInterval = np.mean(np.diff(predictedImuDataArray[:, 0]))
-    rate = 1.0 / imuInterval
-    windowDuration = parsed.window
-    halfWindow = int(windowDuration * rate / 2)
-
-    deltaVarOmegaTol = parsed.delta_var_omega_tol
-    # compute IMU variances
-    print('IMU average rate {}, running window of samples {}'.format(rate, halfWindow * 2))
-
-    varPredictedImu = np.zeros((predictedImuDataArray.shape[0], 3))
-    for index, row in enumerate(predictedImuDataArray):
-        varPredictedImu[index, 0] = row[0]
-        startIndex = max(index - halfWindow, 0)
-        finishIndex = min(index + halfWindow, predictedImuDataArray.shape[0])
-        varPredictedImu[index, 1] = np.sum(np.var(predictedImuDataArray[startIndex : finishIndex, 1:4], axis=0))
-        varPredictedImu[index, 2] = np.sum(np.var(predictedImuDataArray[startIndex : finishIndex, 4:7], axis=0))
-
-    varImu = np.zeros((len(imuData), 3))  # each row: time, running gyro variance, running accelerometer variance
-    imuDataArray = np.zeros((len(imuData), 7))
-    for index, data in enumerate(imuData):
-        imuDataArray[index, 0] = data.stamp.toSec()
-        imuDataArray[index, 1:4] = data.omega
-        imuDataArray[index, 4:7] = data.alpha
-
-    for index, row in enumerate(imuDataArray):
-        varImu[index, 0] = row[0]
-        startIndex = max(index - halfWindow, 0)
-        finishIndex = min(index + halfWindow, imuDataArray.shape[0])
-        varImu[index, 1] = np.sum(np.var(imuDataArray[startIndex : finishIndex, 1:4], axis=0))
-        varImu[index, 2] = np.sum(np.var(imuDataArray[startIndex : finishIndex, 4:7], axis=0))
-
-    bag = rosbag.Bag(outputBag, 'w')
-    predictedImuIndex = 0
-    imuIndex = 0
-    imageCount = 0
-    lastFrameSyncedTime = 0
-
-    for idx in imageDatasetReader.indices:
-        topic, data, stamp = imageDatasetReader.bag._read_message(imageDatasetReader.index[idx].position)
-        if imageDatasetReader.perform_synchronization:
-            syncedTime = imageDatasetReader.timestamp_corrector.getLocalTime(data.header.stamp.to_sec())
-        else:
-            syncedTime = data.header.stamp.secs + data.header.stamp.nsecs * 1e-9
-        syncedTime += baseCamera.timeshiftCamToImuPrior
-
-        while predictedImuIndex < varPredictedImu.shape[0] and varPredictedImu[predictedImuIndex][0] < syncedTime:
-            predictedImuIndex += 1
-        if predictedImuIndex == varPredictedImu.shape[0]:
-            print("Break after reaching the end of IMU data computed from camera images!")
-            break
-
-        atPredictedImuMinimum = False
-        if varPredictedImu[predictedImuIndex, 1] < parsed.max_omega_std ** 2:
-            atPredictedImuMinimum = atArrayMinimum(varPredictedImu, 1, predictedImuIndex - 1, halfWindow, deltaVarOmegaTol) or \
-                                    atArrayMinimum(varPredictedImu, 1, predictedImuIndex, halfWindow, deltaVarOmegaTol)
-
-        while varImu[imuIndex][0] < syncedTime:
-            imuIndex += 1
-        atImuMinimum = False
-        if varImu[imuIndex, 1] < parsed.max_omega_std ** 2 and varImu[imuIndex, 2] < parsed.max_accel_std ** 2:
-            atImuMinimum = atArrayMinimum(varImu, 1, imuIndex - 1, halfWindow, deltaVarOmegaTol) or \
-                           atArrayMinimum(varImu, 1, imuIndex, halfWindow, deltaVarOmegaTol)
-        if atImuMinimum:
-            saveFrame = True
-            if lastFrameSyncedTime != 0:
-                if syncedTime - lastFrameSyncedTime < 2 * imageInterval:
-                    saveFrame = False
-            if saveFrame:
-                bag.write(topic, data, stamp)
-                lastFrameSyncedTime = syncedTime
-                print("Saved frame at {}.".format(syncedTime))
-                syncedTimeStream.write('{} {:.9f}\n'.format(imageCount, syncedTime))
-                imageCount += 1
-
-    print('Saved {} static frames out of {} frames!'.format(imageCount, len(imageDatasetReader.indices)))
-    bag.close()
 
 
 def extractCorners(bagfile, image_topics, target_yaml,
@@ -413,58 +213,86 @@ def extractCorners(bagfile, image_topics, target_yaml,
     return camChainObservations
 
 
+def opticFlow(keypoints_A, keypoints_A_id, timeA, keypoints_B, keypoints_B_id, timeB):
+    """
+    compute optic flow between frame A and frame B
+    :param keypoints_A:
+    :param keypoints_A_id:
+    :param timeA: secs
+    :param keypoints_B:
+    :param keypoints_B_id:
+    :param timeB: secs
+    :return: optic flow
+    """
+    FLOW_SENTINEL = 1000
+    dt = timeB - timeA
+    common_ids = set(keypoints_A_id) & set(keypoints_B_id)
+
+    if len(common_ids) > 0:
+        commonKeypoints_A = []
+        commonKeypoints_B = []
+        opticflow = np.array([0, 0])
+        for id in common_ids:
+            commonKeypoints_A.append(keypoints_A[np.where(keypoints_A_id == id)])
+            commonKeypoints_B.append(keypoints_B[np.where(keypoints_B_id == id)])
+
+        for keypoint_A, keypoint_B in zip(commonKeypoints_A, commonKeypoints_B):
+            flow = np.abs(keypoint_B - keypoint_A)
+            opticflow = np.vstack((opticflow, flow.flatten()))
+        meanflow = np.sum(np.abs(np.mean(opticflow, 0)))
+    else:
+        meanflow = FLOW_SENTINEL
+    return meanflow
+
+
+def opticFlowBetweenFrames(observationA, observationB):
+    timeA = observationA.time().toSec()
+    keypoints_A = observationA.getCornersImageFrame()
+    keypoints_A_id = observationA.getCornersIdx()
+
+    timeB = observationB.time().toSec()
+    keypoints_B = observationB.getCornersImageFrame()
+    keypoints_B_id = observationB.getCornersIdx()
+    return opticFlow(keypoints_A, keypoints_A_id, timeA, keypoints_B, keypoints_B_id, timeB)
+
+
 def selectStaticFramesWithOpticFlow():
     parsed = parseArgs()
     signal.signal(signal.SIGINT, signal_exit)
+
+    bagbasename = os.path.basename(parsed.bagfile)
+    bagnamekey = bagbasename.split('.')[0]
 
     camChainObservations = extractCorners(parsed.bagfile, parsed.topics,
                                           parsed.target_yaml, parsed.bag_from_to,
                                           parsed.showextraction, parsed.verbose)
 
     # compute optic flow between frames
-    flowsentinel = 1000
-    camChainOpticFlow = []
+    camChainOpticFlow = []  # optic flow for every frame of every camera
+    FLOW_SENTINEL = 1000
     for camObservations in camChainObservations:
         flowlist = []
-        lastTime = 0
+        timeA = 0
         keypoints_A = None
         keypoints_A_id = None
         for observation in camObservations:
-            currentTime = observation.time().toSec()
+            timeB = observation.time().toSec()
             keypoints_B = observation.getCornersImageFrame()
             keypoints_B_id = observation.getCornersIdx()
-            if lastTime == 0:
-                meanflow = flowsentinel
+            if timeA == 0:
+                meanflow = FLOW_SENTINEL
             else:
-                dt = currentTime - lastTime
-                common_ids = set(keypoints_A_id) & set(keypoints_B_id)
-
-                if len(common_ids) > 0:
-                    commonKeypoints_A = []
-                    commonKeypoints_B = []
-                    opticflow = np.array([0, 0])
-                    for id in common_ids:
-                        commonKeypoints_A.append(keypoints_A[np.where(keypoints_A_id == id)])
-                        commonKeypoints_B.append(keypoints_B[np.where(keypoints_B_id == id)])
-
-                    for keypoint_A, keypoint_B in zip(commonKeypoints_A, commonKeypoints_B):
-                        flow = np.abs(keypoint_B - keypoint_A)
-                        opticflow = np.vstack((opticflow, flow.flatten()))
-                    meanflow = np.sum(np.mean(opticflow, 0)) / dt
-                else:
-                    meanflow = flowsentinel
+                meanflow = opticFlow(keypoints_A, keypoints_A_id, timeA, keypoints_B, keypoints_B_id, timeB)
             flowlist.append(meanflow)
 
-            lastTime = currentTime
+            timeA = timeB
             keypoints_A = keypoints_B
             keypoints_A_id = keypoints_B_id
         camChainOpticFlow.append(flowlist)
 
     print('Detecting static frames ...')
-    # cluster frames into two groups, static and dynamic group, based on the optic flow
     # first compute running averages in time window
-    # find the max average and min average
-    window = 1
+    window = parsed.window
     halfwin = window * 0.5
     runningAverages = []
     assert len(camChainOpticFlow[0]) == len(camChainObservations[0])
@@ -493,13 +321,23 @@ def selectStaticFramesWithOpticFlow():
     assert len(camChainOpticFlow[0]) == len(runningAverages)
     minFlowInWindow = np.min(runningAverages)
     maxFlowInWindow = np.max(runningAverages)
-    print('Running average flow in window: min {} max {} px/s.'.format(minFlowInWindow, maxFlowInWindow))
+    print('Running average flow in window: min {} max {} px / frame.'.format(minFlowInWindow, maxFlowInWindow))
+
+    flowLog = os.path.join(os.path.dirname(parsed.output_bag), "{}_flow.log".format(bagnamekey))
+    with open(flowLog, 'w') as stream:
+        stream.write('frame index, frame timestamp (sec), optic flow (px/frame), running average flow (px)\n')
+        for index, runningAvg in enumerate(runningAverages):
+            stream.write('{} {:.8f} {:.3f} {:.3f}\n'.format(index, camChainObservations[0][index].time().toSec(),
+                                                camChainOpticFlow[0][index], runningAvg))
 
     # mark the frame whose optic flow is minimum in a window and less than tolerance
     flowTol = minFlowInWindow * 2
-    print('Standstill tolerance optic flow {:.3f} px/s.'.format(flowTol))
+    flowToLastStaticFrameTol = minFlowInWindow * 20
+    print('Standstill tolerance optic flow {:.3f} px/frame, min flow to last static frame > {} px.'.format(
+        flowTol, flowToLastStaticFrameTol))
     staticStatus = []
     staticCount = 0
+    lastStaticFrameId = 0
     for index, flow in enumerate(camChainOpticFlow[0]):
         currentTime = camChainObservations[0][index].time().toSec()
         leftTime = currentTime - halfwin
@@ -521,18 +359,21 @@ def selectStaticFramesWithOpticFlow():
                 id = id + 1
                 time = camChainObservations[0][id].time().toSec()
         currentFlow = camChainOpticFlow[0][index]
-        if currentFlow == np.min(flowInWindow) and currentFlow < flowTol:
+        flowWrtLastStaticFrame = opticFlowBetweenFrames(camChainObservations[0][lastStaticFrameId],
+                                                        camChainObservations[0][index])
+        if currentFlow == np.min(flowInWindow) and currentFlow < flowTol and \
+                flowWrtLastStaticFrame > flowToLastStaticFrameTol:
             staticStatus.append(True)
             staticCount += 1
+            lastStaticFrameId = index
         else:
             staticStatus.append(False)
     assert len(camChainOpticFlow[0]) == len(staticStatus)
 
-
     # select and save the static images
     imageDatasetReader = initBagDataset(parsed.bagfile, parsed.topics[0], parsed.bag_from_to)
     bag = rosbag.Bag(parsed.output_bag, 'w')
-    imageLog = os.path.join(os.path.dirname(parsed.output_bag), "selected_frame_time.log")
+    imageLog = os.path.join(os.path.dirname(parsed.output_bag), "{}_selected_frames.log".format(bagnamekey))
     timeStream = open(imageLog, 'w')
 
     imageCount = 0
@@ -556,28 +397,6 @@ def selectStaticFramesWithOpticFlow():
 
     print('Saved {} static frames out of {} frames!'.format(imageCount, len(imageDatasetReader.indices)))
     bag.close()
-
-
-def selectStaticFramesWithImu():
-    parsed = parseArgs()
-
-    signal.signal(signal.SIGINT, signal_exit)
-
-    cameraList = initializeCameraIntrinsics(parsed.bagfile, parsed.topics, parsed.models,
-                                            parsed.target_yaml, parsed.bag_from_to,
-                                            parsed.showextraction, parsed.verbose)
-
-    chain_yaml = "initial-camchain.yaml"
-    saveCameraIntrinsics(cameraList, parsed.topics, chain_yaml)
-
-    imu_yaml = "initial-imu.yaml"
-    fakeImuYaml(imu_yaml)
-    parsed.bagfile = [parsed.bagfile]
-    parsed.perform_synchronization = True
-    parsed.constant_bias = True
-    baseCamera, predictedImuData, imuData = fitBSplineToCameraPoses(parsed, chain_yaml, imu_yaml, imu_model="calibrated")
-
-    selectStaticFrames(baseCamera, predictedImuData, imuData, parsed)
 
 
 if __name__ == '__main__':

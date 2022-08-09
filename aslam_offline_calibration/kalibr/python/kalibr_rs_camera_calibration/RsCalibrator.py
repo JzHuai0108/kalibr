@@ -60,7 +60,8 @@ class RsCalibratorConfiguration(object):
     inverseFeatureCovariance = 1/0.26
     """The inverse covariance of the feature detector. Used to standardize the error terms."""
 
-    estimateParameters = {'shutter': True, 'intrinsics': True, 'distortion': True, 'pose': True, 'landmarks': False}
+    estimateParameters = {'shutter': True, 'intrinsics': True, 'distortion': True,
+                          'timeOffset': False, 'pose': True, 'landmarks': False}
     """Which parameters to estimate. Dictionary with shutter, intrinsics, distortion, pose, landmarks as bool"""
 
     splineOrder = 4
@@ -362,6 +363,12 @@ class RsCalibrator(object):
             tk = im.stamp.toSec()
             if tk > poseSpline.t_min() and tk < poseSpline.t_max():
                 a_w.append(np.dot(poseSpline.orientation(tk), np.dot(R_i_c, - im.alpha)))
+        if len(a_w) == 0:
+            print("poseSpline t_min {}, t_max {}.".format(poseSpline.t_min(), poseSpline.t_max()))
+            print("IMU data t_min {}, t_max {}.".format(self.__ImuList[0].imuData[0].stamp.toSec(),
+                                                        self.__ImuList[0].imuData[-1].stamp.toSec()))
+            raise IOError('No corresponding IMU data were found.')
+        
         mean_a_w = np.mean(np.asarray(a_w).T, axis=1)
         # A rough gravity magnitude is OK for RS camera calibration with loose IMU constraints.
         gravity_w = mean_a_w / np.linalg.norm(mean_a_w) * 9.80655

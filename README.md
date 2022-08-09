@@ -102,7 +102,7 @@ catkin build -DCMAKE_BUILD_TYPE=Release -j4
 ## RS camera-IMU calibration
 To calibrate a RS camera-IMU system, only two additional parameters are needed compared to the default global shutter (GS) [camera-IMU calibration](https://github.com/ethz-asl/kalibr/wiki/camera-imu-calibration).
 * add parameter *line_delay_nanoseconds* in the camera configuration yaml with an nonzero value, 
-see [a template](./aslam_offline_calibration/kalibr/config_templates/camchain_template.yaml) for example.
+see [a template](aslam_offline_calibration/kalibr/config_templates/camchain_imucam_template.yaml) for example.
 * pass *--estimate-line-delay* to the *kalibr_calibrate_imu_camera* command.
 
 Let's try out RS camera-IMU calibration with the 
