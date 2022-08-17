@@ -21,7 +21,7 @@ class ReprojectionErrorKnotSequenceUpdateStrategy(object):
 
     def __init__(self, framerate):
         self.__framerate = framerate
-        self.__maxKnotsPerSecond = 1.0/(4*self.__framerate)
+        self.__maxKnotsPerSecond = 1.0/(2.0*self.__framerate)
 
     def generateKnotList(self, reprojection_errors, poseSpline):
         [times, errors] = self.__getErrorAndTimestamp(reprojection_errors)
