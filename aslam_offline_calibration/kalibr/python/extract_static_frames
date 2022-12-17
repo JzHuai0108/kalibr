@@ -27,8 +27,6 @@ def parseArgs():
     parser = argparse.ArgumentParser()
     groupData = parser.add_argument_group('Dataset source')
     groupData.add_argument('bagfile', help='Ros bag file containing images')
-    parser.add_argument('--models', nargs='+', dest='models',
-                        help='The camera model {0} to estimate'.format(cameraModels.keys()))
     groupData.add_argument('--bag-from-to', metavar='bag_from_to', type=float, nargs=2,
                            help='Use the bag data starting from up to this time [s]')
     parser.add_argument('--topics', nargs='+', type=str, default=["/cam0/image_raw"], dest='topics',
@@ -60,7 +58,6 @@ def initBagDataset(bagfile, topic, from_to):
     return reader
 
 
-#available models
 cameraModels = { 'pinhole-radtan': acvb.DistortedPinhole,
                  'pinhole-equi':   acvb.EquidistantPinhole,
                  'pinhole-fov':    acvb.FovPinhole,
@@ -75,113 +72,12 @@ def signal_exit(signal, frame):
     sys.exit(2)
 
 
-def initializeCameraIntrinsics(bagfile, image_topics, models, target_yaml, bag_from_to, showextraction, verbose):
-    targetConfig = kc.CalibrationTargetParameters(target_yaml)
-
-    # create camera objects, initialize the intrinsics and extract targets
-    cameraList = list()
-    numCams = len(image_topics)
-
-    for cam_id in range(0, numCams):
-        topic = image_topics[cam_id]
-        modelName = models[cam_id]
-        print("Initializing cam{0}:".format(cam_id))
-        print("\tCamera model:\t  {0}".format(modelName))
-
-        if modelName in cameraModels:
-            # open dataset
-            dataset = initBagDataset(bagfile, topic, bag_from_to)
-
-            # create camera
-            cameraModel = cameraModels[modelName]
-            cam = kcc.CameraGeometry(cameraModel, targetConfig, dataset,
-                                     verbose=(verbose or showextraction))
-
-            # extract the targets
-            multithreading = not (verbose or showextraction)
-            observations = kc.extractCornersFromDataset(cam.dataset, cam.ctarget.detector,
-                                                        multithreading=multithreading, clearImages=False,
-                                                        noTransformation=True)
-
-            # initialize the intrinsics
-            if not cam.initGeometryFromObservations(observations):
-                raise RuntimeError("Could not initialize the intrinsics for camera with topic: {0}. "
-                                   "Try to use --verbose and check whether the calibration target"
-                                   " extraction is successful.".format(topic))
-
-            print("\tProjection initialized to: %s" % cam.geometry.projection().getParameters().flatten())
-            print("\tDistortion initialized to: %s" % cam.geometry.projection().distortion().getParameters().flatten())
-
-            cameraList.append(cam)
-        else:
-            raise RuntimeError("Unknown camera model: {0}. Try {1}.".format(modelName, cameraModels.keys()))
-    return cameraList
-
-
-def saveCameraIntrinsics(cameraList, imageTopics, resultFile):
-    """WITHOUT OVERLAP or EXTRINSICS."""
-    cameraModelNames = {acvb.DistortedPinhole: 'pinhole',
-                    acvb.EquidistantPinhole: 'pinhole',
-                    acvb.FovPinhole: 'pinhole',
-                    acvb.Omni: 'omni',
-                    acvb.DistortedOmni: 'omni',
-                    acvb.ExtendedUnified: 'eucm',
-                    acvb.DoubleSphere: 'ds'}
-    distortionModels = {acvb.DistortedPinhole: 'radtan',
-                        acvb.EquidistantPinhole: 'equidistant',
-                        acvb.FovPinhole: 'fov',
-                        acvb.Omni: 'none',
-                        acvb.DistortedOmni: 'radtan',
-                        acvb.ExtendedUnified: 'none',
-                        acvb.DoubleSphere: 'none'}
-
-    chain = cr.CameraChainParameters(resultFile, createYaml=True)
-    for cam_id, cam in enumerate(cameraList):
-        cameraModel = cameraModelNames[cam.model]
-        distortionModel = distortionModels[cam.model]
-
-        # create new config file
-        camParams = cr.CameraParameters(resultFile, createYaml=True)
-        camParams.setRosTopic(imageTopics[cam_id])
-
-        # set the data
-        P = cam.geometry.projection()
-        if cameraModel == 'omni':
-            camParams.setIntrinsics(cameraModel, [P.xi(), P.fu(), P.fv(), P.cu(), P.cv()])
-        elif cameraModel == 'pinhole':
-            camParams.setIntrinsics(cameraModel, [P.fu(), P.fv(), P.cu(), P.cv()])
-        elif cameraModel == 'eucm':
-            camParams.setIntrinsics(cameraModel, [P.alpha(), P.beta(), P.fu(), P.fv(), P.cu(), P.cv()])
-        elif cameraModel == 'ds':
-            camParams.setIntrinsics(cameraModel, [P.xi(), P.alpha(), P.fu(), P.fv(), P.cu(), P.cv()])
-        else:
-            raise RuntimeError("Invalid camera model {}.".format(cameraModel))
-        camParams.setResolution([P.ru(), P.rv()])
-        dist_coeffs = P.distortion().getParameters().flatten(1)
-        camParams.setDistortion(distortionModel, dist_coeffs)
-        camParams.setImageNoise(1.0)
-        chain.addCameraAtEnd(camParams)
-
-    chain.writeYaml()
-
-
-def atArrayMinimum(array, dataColumn, checkRow, halfWindow, tol):
-    startIndex = max(0, checkRow - halfWindow)
-    finishIndex = min(checkRow + halfWindow, array.shape[0])
-    if abs(np.amin(array[startIndex : finishIndex, dataColumn]) -
-           array[checkRow, dataColumn]) < tol:
-        return True
-    else:
-        return False
-
-
 def extractCorners(bagfile, image_topics, target_yaml,
                    bag_from_to = None, showextraction = False, verbose = False):
     """
 
     :param bagfile:
     :param image_topics:
-    :param models:
     :param target_yaml:
     :param bag_from_to:
     :param showextraction:
@@ -213,19 +109,18 @@ def extractCorners(bagfile, image_topics, target_yaml,
     return camChainObservations
 
 
-def opticFlow(keypoints_A, keypoints_A_id, timeA, keypoints_B, keypoints_B_id, timeB):
+def opticFlow(keypoints_A, keypoints_A_id, keypoints_B, keypoints_B_id):
     """
     compute optic flow between frame A and frame B
     :param keypoints_A:
     :param keypoints_A_id:
-    :param timeA: secs
+    :param timeA:
     :param keypoints_B:
     :param keypoints_B_id:
-    :param timeB: secs
+    :param timeB:
     :return: optic flow
     """
     FLOW_SENTINEL = 1000
-    dt = timeB - timeA
     common_ids = set(keypoints_A_id) & set(keypoints_B_id)
 
     if len(common_ids) > 0:
@@ -246,14 +141,12 @@ def opticFlow(keypoints_A, keypoints_A_id, timeA, keypoints_B, keypoints_B_id, t
 
 
 def opticFlowBetweenFrames(observationA, observationB):
-    timeA = observationA.time().toSec()
     keypoints_A = observationA.getCornersImageFrame()
     keypoints_A_id = observationA.getCornersIdx()
 
-    timeB = observationB.time().toSec()
     keypoints_B = observationB.getCornersImageFrame()
     keypoints_B_id = observationB.getCornersIdx()
-    return opticFlow(keypoints_A, keypoints_A_id, timeA, keypoints_B, keypoints_B_id, timeB)
+    return opticFlow(keypoints_A, keypoints_A_id, keypoints_B, keypoints_B_id)
 
 
 def selectStaticFramesWithOpticFlow():
@@ -272,20 +165,19 @@ def selectStaticFramesWithOpticFlow():
     FLOW_SENTINEL = 1000
     for camObservations in camChainObservations:
         flowlist = []
-        timeA = 0
+        firstframe = True
         keypoints_A = None
         keypoints_A_id = None
         for observation in camObservations:
-            timeB = observation.time().toSec()
             keypoints_B = observation.getCornersImageFrame()
             keypoints_B_id = observation.getCornersIdx()
-            if timeA == 0:
+            if firstframe:
                 meanflow = FLOW_SENTINEL
+                firstframe = False
             else:
-                meanflow = opticFlow(keypoints_A, keypoints_A_id, timeA, keypoints_B, keypoints_B_id, timeB)
+                meanflow = opticFlow(keypoints_A, keypoints_A_id, keypoints_B, keypoints_B_id)
             flowlist.append(meanflow)
 
-            timeA = timeB
             keypoints_A = keypoints_B
             keypoints_A_id = keypoints_B_id
         camChainOpticFlow.append(flowlist)
@@ -326,9 +218,10 @@ def selectStaticFramesWithOpticFlow():
     flowLog = os.path.join(os.path.dirname(parsed.output_bag), "{}_flow.log".format(bagnamekey))
     with open(flowLog, 'w') as stream:
         stream.write('frame index, frame timestamp (sec), optic flow (px/frame), running average flow (px)\n')
+        time = camChainObservations[0][index].time()
+        timeStr = "{}.{:09d}".format(time.sec, time.nsec)
         for index, runningAvg in enumerate(runningAverages):
-            stream.write('{} {:.8f} {:.3f} {:.3f}\n'.format(index, camChainObservations[0][index].time().toSec(),
-                                                camChainOpticFlow[0][index], runningAvg))
+            stream.write('{} {} {:.3f} {:.3f}\n'.format(index, timeStr, camChainOpticFlow[0][index], runningAvg))
 
     # mark the frame whose optic flow is minimum in a window and less than tolerance
     flowTol = minFlowInWindow * 2
@@ -385,8 +278,9 @@ def selectStaticFramesWithOpticFlow():
         frameTime = acv.Time(data.header.stamp.secs, data.header.stamp.nsecs)
         if frameTime == camChainObservations[0][staticIndex].time():
             bag.write(topic, data, stamp)
-            print("Saved frame at {}.".format(frameTime.toSec()))
-            timeStream.write('{} {:.9f}\n'.format(imageCount, frameTime.toSec()))
+            frameTimeStr = "{}.{:09d}".format(frameTime.sec, frameTime.nsec)
+            print("Saved frame at {}.".format(frameTimeStr))
+            timeStream.write('{} {}\n'.format(imageCount, frameTimeStr))
             imageCount += 1
             assert staticStatus[staticIndex]
             staticIndex += 1
