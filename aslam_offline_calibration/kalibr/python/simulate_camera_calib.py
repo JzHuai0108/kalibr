@@ -203,7 +203,7 @@ def main():
                             noisyValue(imagePoint[1, 0], imageHeight, ynoise)]
             x.append(noisyPoint)
             spd = origcspond[j][0]
-            cspond = origcspond[j]
+            cspond.append([iota+1, 1])
             m = np.where(spd==iota+1)
             if m[0].shape[0]==0:
                 continue
@@ -218,7 +218,8 @@ def main():
         np_T_tc[0:3] = sm_T_w_c.t()
         # quatInv converts JPL quaternion to Hamilton quaternion (x,y,z,w).
         np_T_tc[3:7] = sm.quatInv(sm_T_w_c.q())
-        x = list(map(list, zip(*x)))
+        x = np.array(x).transpose().tolist()
+        cspond = np.array(cspond).transpose().tolist()
         corners_mat.append({"x": x, "cspond": cspond, 't_T_c': np_T_tc, 'used' : origused[j]})
 
     # refer to https://github.com/castacks/tartancalib/blob/main/aslam_offline_calibration/kalibr/python/tartan_calibrate#L586-L593
