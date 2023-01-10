@@ -12,34 +12,28 @@ import numpy as np
 from random import gauss
 
 def parseArgs():
-    # camera yaml
-    # target yaml
-    # pose mat
-    # noise std
+    # camera yaml, target yaml, pose mat, noise std
     parser = argparse.ArgumentParser(
         description="input: include camera.yaml, target.yaml, pose.mat and noise std")
     parser.add_argument("--camera_yaml",
-                        default='[./data/camera.yaml]',
+                        default='./data/camera.yaml',
                         help="camera.yaml")
     parser.add_argument("--target_yaml",
-                        default='[./data/target.yaml]',
+                        default='./data/target.yaml',
                         help="target.yaml")
     parser.add_argument("--posemat",
-                        default='[./data/pose.mat]',
-                        help="pose.mat")
+                        default="corners.mat", 
+                        help="corners saved in matlab format")
     parser.add_argument('--noise_std',
                         type=float,
-                        default=[0.01],
+                        default=0.01,
                         help='noise std')
-    parser.add_argument("--out_cornerfile",
-                        default='[./data/outcorner.mat]',
+    parser.add_argument("--outputmat",
+                        default='./data/outcorner.mat',
                         help="outcorner.mat")
     args = parser.parse_args()
 
     return args
-
-# # References
-# # [1] https://github.com/JzHuai0108/kalibr/blob/develop/aslam_offline_calibration/kalibr/python/kalibr_imu_camera_calibration/Simulator.py
 
 def printExtraCameraDetails(camConfig):
     resolution = camConfig.getResolution()
@@ -54,17 +48,11 @@ def printExtraCameraDetails(camConfig):
 def loadCamera(camera_yaml):
     print("Camera chain from {}".format(camera_yaml))
     chain = kc.CameraChainParameters(camera_yaml)
-    T_imu_cam_list = []
-    timeOffsetList = []
     camGeometryList = []
     numCameras = chain.numCameras()
     for i in range(numCameras):
         camConfig = chain.getCameraParameters(i)
         camConfig.printDetails()
-        # printExtraCameraDetails(camConfig)
-        # These parameters are set to default values assuming no IMU is present.
-        T_imu_cam_list.append(sm.Transformation())
-        timeOffsetList.append(0)
         camera = kc.AslamCamera.fromParameters(camConfig)
         camGeometryList.append(camera.geometry)
     
@@ -76,7 +64,6 @@ def loadTarget(target_yaml):
     targetConfig.printDetails()
     targetObservation = None
     allTargetCorners = None
-    # setupCalibrationTarget(targetConfig, showExtraction=False, showReproj=False, imageStepping=False)
 
     # load the calibration target configuration
     targetParams = targetConfig.getTargetParams()
@@ -128,32 +115,27 @@ def loadTarget(target_yaml):
     return targetObservation
 
 def loadPoses(posemat):
+    '''Note the cspond index is in matlab format, starts from 1.'''
     data = (io.loadmat(posemat))['corners']
     poses = []
     x = []
     cspond = []
     gused = []
-    print(data.shape[1])
     for i in range(data.shape[1]):
         ptemp = data[0, i]['t_T_c'][0, 0][0, :3]
         qtemp = data[0, i]['t_T_c'][0, 0][0, 3:]
-        # Note convert the pose to aslam::Transformation() by toSmTransformation
         poses.append(toSmTransformation(qtemp, ptemp))
         x.append(data[0, i]['x'][0, 0])
         cspond.append(data[0, i]['cspond'][0, 0])
         gused.append(data[0, i]['used'][0, 0])
 
-    # Note the cspond index is in matlab format, starts from 1.
     resolution = (io.loadmat(posemat))['imgsize'][0]
-    # print(resolution)
     times = (io.loadmat(posemat))['times'][0]
 
     return poses, resolution, x, cspond, gused, times
 
-def saveMat(corners_mat, imgsize, times, used, marked, out_cornerfile):
-    # # save board def mat
-    # io.savemat('board.mat',{"boards":{"Rt":Rt,"X":x_board}})s
-    io.savemat(out_cornerfile, {"corners": corners_mat, "imgsize": imgsize,
+def saveMat(corners_mat, imgsize, times, used, marked, outputmat):
+    io.savemat(outputmat, {"corners": corners_mat, "imgsize": imgsize,
                                 "times": times,
                                 'used':used, 'marked': marked})
 
@@ -174,10 +156,10 @@ def noisyValue(x, upperbound, noise):
 
 
 def main():
-    args = parseArgs() # TODO: binliang refer to https://github.com/JzHuai0108/vio_common/blob/master/python/rgbd_bag_to_synced_images.py#L56-L81
-    cam = loadCamera(args.camera_yaml) # TODO: refer to https://github.com/JzHuai0108/kalibr/blob/develop/aslam_offline_calibration/kalibr/python/kalibr_imu_camera_calibration/Simulator.py#L93-L118
-    targetObservation = loadTarget(args.target_yaml) # TODO: refer to https://github.com/JzHuai0108/kalibr/blob/develop/aslam_offline_calibration/kalibr/python/kalibr_imu_camera_calibration/Simulator.py#L120-L168
-    poses, resolution, origx, origcspond, origused, times  = loadPoses(args.posemat) # TODO: load matlab mat file of poses by scipy.io.loadmat
+    args = parseArgs() 
+    cam = loadCamera(args.camera_yaml) 
+    targetObservation = loadTarget(args.target_yaml) 
+    poses, resolution, origx, origcspond, origused, times  = loadPoses(args.posemat) 
 
     numLandmarks = targetObservation.getTotalTargetPoint()
     imageWidth = resolution[0]
@@ -185,7 +167,7 @@ def main():
 
     numFailedProjection = 0
     corners_mat = []
-    print(numLandmarks)
+    numusedframes = 0
     for j in range(len(poses)):
         x = []
         cspond = []
@@ -196,18 +178,18 @@ def main():
             if not validProjection:
                 numFailedProjection += 1
                 continue
-            # add noise # TODO refer to https://github.com/JzHuai0108/kalibr/blob/develop/aslam_offline_calibration/kalibr/python/kalibr_imu_camera_calibration/Simulator.py#L359-L362
-            xnoise = gauss(0.0, args.noise_std[0])
-            ynoise = gauss(0.0, args.noise_std[0])
+            xnoise = gauss(0.0, args.noise_std)
+            ynoise = gauss(0.0, args.noise_std)
             noisyPoint = [noisyValue(imagePoint[0, 0], imageWidth, xnoise),
                             noisyValue(imagePoint[1, 0], imageHeight, ynoise)]
             x.append(noisyPoint)
             spd = origcspond[j][0]
             cspond.append([iota+1, 1])
-            m = np.where(spd==iota+1)
-            if m[0].shape[0]==0:
+            found = [i for i, y in enumerate(spd) if y == iota + 1]
+            if len(found) == 0:
                 continue
-            origPoint = [origx[j][:, m][0][0][0],origx[j][:, m][1][0][0]]
+            m = int(found[0])
+            origPoint = origx[j][:, m]
             subPoint = [noisyPoint[0]-origPoint[0], noisyPoint[1]-origPoint[1]]
             if np.linalg.norm(subPoint)>5:
                 print('warn: Dist(noisyPoint-origPoint)>5')
@@ -218,12 +200,12 @@ def main():
         np_T_tc[0:3] = sm_T_w_c.t()
         # quatInv converts JPL quaternion to Hamilton quaternion (x,y,z,w).
         np_T_tc[3:7] = sm.quatInv(sm_T_w_c.q())
-        x = np.array(x).transpose().tolist()
-        cspond = np.array(cspond).transpose().tolist()
-        corners_mat.append({"x": x, "cspond": cspond, 't_T_c': np_T_tc, 'used' : origused[j]})
+        x = np.array(x).transpose()
+        cspond = np.array(cspond).transpose()
+        corners_mat.append({"x": x, "cspond": cspond, 't_T_c': np_T_tc, 'used' : 1})
+        numusedframes += 1
 
-    # refer to https://github.com/castacks/tartancalib/blob/main/aslam_offline_calibration/kalibr/python/tartan_calibrate#L586-L593
-    saveMat(corners_mat, resolution, times, 32, 32, args.out_cornerfile)
+    saveMat(corners_mat, resolution, times, numusedframes, numusedframes, args.outputmat)
 
 if __name__ == "__main__":
     main()
