@@ -21,7 +21,7 @@ def sampleAndSaveBSplinePoses(times, poseSplineDv, stream=sys.stdout, T_b_c=sm.T
             continue
         T_w_b = poseSplineDv.transformationAtTime(timeExpression, timeOffsetPadding, timeOffsetPadding)
         sm_T_w_c = sm.Transformation(T_w_b.toTransformationMatrix())*T_b_c
-        # quatInv used here to convert kalibr's JPL quaternion to Halmilton quaternion
+        # quatInv used here to convert kalibr's JPL quaternion to Hamilton quaternion
         print('{:.9f}, {}, {}'.format(time, ','.join(map(str,sm_T_w_c.t())),
                                       ','.join(map(str, sm.quatInv(sm_T_w_c.q())))), file=stream)
 
