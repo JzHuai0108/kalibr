@@ -15,22 +15,24 @@ def parseArgs():
     # camera yaml, target yaml, pose mat, noise std
     parser = argparse.ArgumentParser(
         description="input: include camera.yaml, target.yaml, pose.mat and noise std")
-    parser.add_argument("--camera_yaml",
+    parser.add_argument("--camera-yaml",
                         default='./data/camera.yaml',
                         help="camera.yaml")
-    parser.add_argument("--target_yaml",
+    parser.add_argument("--target-yaml",
                         default='./data/target.yaml',
                         help="target.yaml")
     parser.add_argument("--posemat",
                         default="corners.mat", 
                         help="corners saved in matlab format")
-    parser.add_argument('--noise_std',
+    parser.add_argument('--noise-std',
                         type=float,
                         default=0.01,
                         help='noise std')
     parser.add_argument("--outputmat",
                         default='./data/outcorner.mat',
                         help="outcorner.mat")
+
+    parser.add_argument('--sim-only-used', action='store_true', help='only simulate used poses')
     args = parser.parse_args()
 
     return args
@@ -159,7 +161,7 @@ def main():
     args = parseArgs() 
     cam = loadCamera(args.camera_yaml) 
     targetObservation = loadTarget(args.target_yaml) 
-    poses, resolution, origx, origcspond, origused, times  = loadPoses(args.posemat) 
+    poses, resolution, origx, origcspond, origused, origtimes = loadPoses(args.posemat)
 
     numLandmarks = targetObservation.getTotalTargetPoint()
     imageWidth = resolution[0]
@@ -167,14 +169,18 @@ def main():
 
     numFailedProjection = 0
     corners_mat = []
+    times = []
     numusedframes = 0
-    for j in range(len(poses)):
+    numcheckedpoints = 0
+    for j, pose in enumerate(poses):
+        if args.sim_only_used and origused[j] == 0:
+            continue
         x = []
         cspond = []
         sm_T_w_c = poses[j]
         for iota in range(numLandmarks):
-            validProjection, imagePoint = targetObservation.projectATargetPoint(cam[0], sm_T_w_c,
-                                                                                         iota) # 3x1.
+            validProjection, imagePoint = targetObservation.projectATargetPoint(cam[0], sm_T_w_c, iota)
+            # imagePoint 3x1
             if not validProjection:
                 numFailedProjection += 1
                 continue
@@ -191,10 +197,10 @@ def main():
             m = int(found[0])
             origPoint = origx[j][:, m]
             subPoint = [noisyPoint[0]-origPoint[0], noisyPoint[1]-origPoint[1]]
-            if np.linalg.norm(subPoint)>5:
-                print('warn: Dist(noisyPoint-origPoint)>5')
-                print(noisyPoint)
-                print(origPoint)
+            numcheckedpoints += 1
+            d = np.linalg.norm(subPoint)
+            if d > 5:
+                print('Warn: Dist(noisyPoint({}) - origPoint({})) {} > 5'.format(noisyPoint, origPoint, d))
         
         np_T_tc = np.zeros(7)
         np_T_tc[0:3] = sm_T_w_c.t()
@@ -203,9 +209,11 @@ def main():
         x = np.array(x).transpose()
         cspond = np.array(cspond).transpose()
         corners_mat.append({"x": x, "cspond": cspond, 't_T_c': np_T_tc, 'used' : 1})
+        times.append(origtimes[j])
         numusedframes += 1
-
+    print("Simulated {} frames, checked {} points.".format(numusedframes, numcheckedpoints))
     saveMat(corners_mat, resolution, times, numusedframes, numusedframes, args.outputmat)
+
 
 if __name__ == "__main__":
     main()

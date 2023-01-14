@@ -37,7 +37,7 @@ def parseArgs():
 
     groupOpt = parser.add_argument_group('Selection options')
     groupOpt.add_argument('--window', type=float, default=1.0,
-                          help='window size to compute variance, in seconds %(default)s)')
+                          help='window size to compute variance, in seconds (default: %(default)s)')
 
     outputSettings = parser.add_argument_group('Output options')
     outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Enable (really) verbose output (disables plots)')

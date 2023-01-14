@@ -46,3 +46,5 @@ CMakeLists.txt.user
 .DS_Store
 
 aslam_offline_calibration/kalibr/python/.idea/
+
+.idea/
