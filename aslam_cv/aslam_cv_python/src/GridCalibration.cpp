@@ -200,9 +200,9 @@ Eigen::MatrixXd getCornerReprojection(FrameObservation *frame,
 /// \brief get all corners in image frame coordinates (order matches getObservedTargetFrame)
 boost::python::tuple projectATargetPoint(aslam::cameras::GridCalibrationTargetObservation * frame, 
     const boost::shared_ptr<aslam::cameras::CameraGeometryBase> cameraGeometry, 
-    const sm::kinematics::Transformation & T_t_c, const size_t i) {
+    const sm::kinematics::Transformation & T_t_c, const size_t i, bool kb) {
   cv::Point2f outPointReproj;
-  bool isValid = frame->projectATargetPoint(cameraGeometry, T_t_c, i, outPointReproj);
+  bool isValid = frame->projectATargetPoint(cameraGeometry, T_t_c, i, outPointReproj, kb);
   // Convert all image corners to eigen
   Eigen::MatrixXd cornersReprojEigen = Eigen::MatrixXd::Zero(3,1);
   cornersReprojEigen(0) = outPointReproj.x;

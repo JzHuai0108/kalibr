@@ -47,18 +47,24 @@ def printExtraCameraDetails(camConfig):
     updateRate = camConfig.getUpdateRate()
     print("  Update rate: {} Hz".format(updateRate))
 
+def isKB(modelpair):
+    return modelpair[0] == "pinhole" and modelpair[1] == "equidistant"
+
 def loadCamera(camera_yaml):
     print("Camera chain from {}".format(camera_yaml))
     chain = kc.CameraChainParameters(camera_yaml)
     camGeometryList = []
+    cammodels = []
     numCameras = chain.numCameras()
     for i in range(numCameras):
         camConfig = chain.getCameraParameters(i)
         camConfig.printDetails()
+        camera_model, intrinsics = camConfig.getIntrinsics()
+        dist_model, dist_coeff = camConfig.getDistortion()
         camera = kc.AslamCamera.fromParameters(camConfig)
         camGeometryList.append(camera.geometry)
-    
-    return camGeometryList
+        cammodels.append((camera_model, dist_model))
+    return camGeometryList, cammodels
 
 def loadTarget(target_yaml):
     targetConfig = kc.CalibrationTargetParameters(target_yaml)
@@ -159,7 +165,7 @@ def noisyValue(x, upperbound, noise):
 
 def main():
     args = parseArgs() 
-    cam = loadCamera(args.camera_yaml) 
+    cam, models = loadCamera(args.camera_yaml) 
     targetObservation = loadTarget(args.target_yaml) 
     poses, resolution, origx, origcspond, origused, origtimes = loadPoses(args.posemat)
 
@@ -172,6 +178,7 @@ def main():
     times = []
     numusedframes = 0
     numcheckedpoints = 0
+    iskb = isKB(models[0])
     for j, pose in enumerate(poses):
         if args.sim_only_used and origused[j] == 0:
             continue
@@ -179,7 +186,7 @@ def main():
         cspond = []
         sm_T_w_c = poses[j]
         for iota in range(numLandmarks):
-            validProjection, imagePoint = targetObservation.projectATargetPoint(cam[0], sm_T_w_c, iota)
+            validProjection, imagePoint = targetObservation.projectATargetPoint(cam[0], sm_T_w_c, iota, iskb)
             # imagePoint 3x1
             if not validProjection:
                 numFailedProjection += 1

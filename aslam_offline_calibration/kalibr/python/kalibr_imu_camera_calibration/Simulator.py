@@ -227,7 +227,7 @@ class RsCameraSimulator(object):
             sm_T_w_c, validPose = getCameraPoseAt(state_time, self.poseSplineDv, T_imu_cam)
             if not validPose:
                 continue
-            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_c, iota) # 3x1.
+            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_c, iota, False) # 3x1.
             if not validProjection:
                 continue
             numIter = 0
@@ -240,7 +240,7 @@ class RsCameraSimulator(object):
             while numIter < 8:
                 currTime = (lastImagePoint[1, 0] - imageHeight * 0.5) * line_delay + state_time
                 sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, T_imu_cam)
-                validProjection, imagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota)
+                validProjection, imagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota, False)
                 if not validPose or not validProjection:
                     aborted = True
                     break
@@ -291,7 +291,7 @@ class RsCameraSimulator(object):
         imageHeight = resolution[1]
         for iota in range(numLandmarks):
             sm_T_w_c, validPose = getCameraPoseAt(state_time, self.poseSplineDv, T_imu_cam)
-            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_c, iota) # 3x1.
+            validProjection, lastImagePoint = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_c, iota, False) # 3x1.
             if not validPose:
                 numOutOfBound += 1
                 continue
@@ -319,7 +319,7 @@ class RsCameraSimulator(object):
                 currTime = (lastImagePoint[1, 0] - imageHeight * 0.5) * line_delay + state_time
                 sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, T_imu_cam)
 
-                validProjection, imagePoint0 = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota)
+                validProjection, imagePoint0 = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota, False)
                 if not validPose:
                     numOutOfBound += 1
                     aborted = True
@@ -333,7 +333,7 @@ class RsCameraSimulator(object):
                 currTime = (lastImagePoint[1, 0] + eps - imageHeight * 0.5) * line_delay + state_time
                 sm_T_w_cx, validPose = getCameraPoseAt(currTime, self.poseSplineDv, T_imu_cam)
 
-                validProjection, imagePoint1 = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota)
+                validProjection, imagePoint1 = self.targetObservation.projectATargetPoint(camGeometry, sm_T_w_cx, iota, False)
                 if not validPose:
                     numOutOfBound += 1
                     aborted = True

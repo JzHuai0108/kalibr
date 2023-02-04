@@ -139,9 +139,59 @@ unsigned int GridCalibrationTargetObservation::getCornerReprojection(const boost
   return cntCorners;
 }
 
+bool KannalaBrandtProject(const Eigen::Vector3d &p3d, const Eigen::MatrixXd &allp, 
+                          Eigen::VectorXd &proj) {
+  // https://github.com/berndpfrommer/basalt-headers/blob/robustness_to_bad_data/include/basalt/camera/kannala_brandt_camera4.hpp
+  typedef double Scalar;
+  const Scalar& fx = allp(0, 0);
+  const Scalar& fy = allp(1, 0);
+  const Scalar& cx = allp(2, 0);
+  const Scalar& cy = allp(3, 0);
+  const Scalar& k1 = allp(4, 0);
+  const Scalar& k2 = allp(5, 0);
+  const Scalar& k3 = allp(6, 0);
+  const Scalar& k4 = allp(7, 0);
+
+  const Scalar& x = p3d[0];
+  const Scalar& y = p3d[1];
+  const Scalar& z = p3d[2];
+
+  const Scalar r2 = x * x + y * y;
+  const Scalar r = sqrt(r2);
+  const Scalar epsSqrt = 1e-5;
+  proj.resize(2, 1);
+  if (r > epsSqrt) {
+    const Scalar theta = atan2(r, z);
+    const Scalar theta2 = theta * theta;
+
+    Scalar r_theta = k4 * theta2;
+    r_theta += k3;
+    r_theta *= theta2;
+    r_theta += k2;
+    r_theta *= theta2;
+    r_theta += k1;
+    r_theta *= theta2;
+    r_theta += 1;
+    r_theta *= theta;
+
+    const Scalar mx = x * r_theta / r;
+    const Scalar my = y * r_theta / r;
+
+    proj[0] = fx * mx + cx;
+    proj[1] = fy * my + cy;
+  } else {
+    // Check that the point is not cloze to zero norm
+    if (z < epsSqrt) return false;
+
+    proj[0] = fx * x / z + cx;
+    proj[1] = fy * y / z + cy;
+  }
+  return true;  
+}
+
 bool GridCalibrationTargetObservation::projectATargetPoint(const boost::shared_ptr<CameraGeometryBase> cameraGeometry,
                                                                    const sm::kinematics::Transformation & T_t_c,
-                                                                   const size_t i, cv::Point2f &outPointReproj) const
+                                                                   const size_t i, cv::Point2f &outPointReproj, bool kb) const
 {    
   cv::Point3f targetPoint(_target->point(i)[0], _target->point(i)[1], 0.0);
   
@@ -149,11 +199,18 @@ bool GridCalibrationTargetObservation::projectATargetPoint(const boost::shared_p
 
   //reproject
   Eigen::Vector3d p(targetPoint.x, targetPoint.y, targetPoint.z);
-  Eigen::VectorXd pReproj = T_t_c.inverse() * p;
+  Eigen::Vector3d pC = T_t_c.inverse() * p;
   Eigen::VectorXd pReprojImg;
 
   //handle camera geometry
-  bool isValid = cameraGeometry->vsEuclideanToKeypoint(pReproj, pReprojImg);
+  bool isValid = false;
+  if (kb) {
+    Eigen::MatrixXd allp;
+    cameraGeometry->getParameters(allp, true, true, true);
+    isValid  = KannalaBrandtProject(pC, allp, pReprojImg);
+  } else {
+    isValid = cameraGeometry->vsEuclideanToKeypoint(pC, pReprojImg);
+  }
 
   //store points
   outPointReproj.x = pReprojImg(0);

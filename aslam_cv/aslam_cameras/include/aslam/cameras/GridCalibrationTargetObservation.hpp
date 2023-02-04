@@ -210,7 +210,7 @@ class GridCalibrationTargetObservation : public ObservationInterface {
   /// \brief project a target point i, used ONLY for simulation
   bool projectATargetPoint(const boost::shared_ptr<CameraGeometryBase> cameraGeometry,
                            const sm::kinematics::Transformation & T_t_c,
-                           const size_t i, cv::Point2f &outPointReproj) const;
+                           const size_t i, cv::Point2f &outPointReproj, bool kb) const;
 
   unsigned int getTotalTargetPoint() const;
 
