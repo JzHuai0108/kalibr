@@ -1,5 +1,6 @@
 """
-Simulate monocular camera calibration data given poses, target, and the camera configuration yaml
+Simulate 2d observations for monocular camera calibration given poses, target, and the camera configuration yaml.
+No rolling shutter effect is added since camera calibration can do away with it by holding the target static.
 """
 import sm
 import kalibr_common as kc
@@ -23,7 +24,8 @@ def parseArgs():
                         help="target.yaml")
     parser.add_argument("--posemat",
                         default="corners.mat", 
-                        help="corners saved in matlab format")
+                        help=("corners saved in babelcalib's matlab format by using the tartancalib tool at"
+                              "git@github.com:JzHuai0108/tartancalib.git"))
     parser.add_argument('--noise-std',
                         type=float,
                         default=0.01,
@@ -208,7 +210,7 @@ def main():
             d = np.linalg.norm(subPoint)
             if d > 5:
                 print('Warn: Dist(noisyPoint({}) - origPoint({})) {} > 5'.format(noisyPoint, origPoint, d))
-        
+
         np_T_tc = np.zeros(7)
         np_T_tc[0:3] = sm_T_w_c.t()
         # quatInv converts JPL quaternion to Hamilton quaternion (x,y,z,w).

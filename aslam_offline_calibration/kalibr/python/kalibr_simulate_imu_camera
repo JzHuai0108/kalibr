@@ -65,23 +65,24 @@ def parseArgs():
         tagSpacing: 0.3           |      update_rate: 200.0"""
 
     #setup the argument list
-    parser = KalibrArgParser(description='Simulate rolling shutter camera measurements and inertial readings.', usage=usage)
+    parser = KalibrArgParser(description=('Simulate rolling shutter camera measurements and inertial readings'
+        'given bspline poses, camera-IMU configuration, and target description.'), usage=usage)
 
     #simulation options
     groupSim = parser.add_argument_group('Simulation options')
     groupSim.add_argument('pose_file', help='The file of the knot coefficients of the pose B spline')
     groupSim.add_argument('--gyro-bias-file', dest='gyro_bias_file',
             help=('The file of the knot coefficients of the gyro bias B spline.'
-                  ' If not specified, it will be deduced from the pose_file!'))
+                  ' If not specified, its path will be deduced from the pose_file!'))
     groupSim.add_argument('--acc-bias-file', dest='acc_bias_file',
             help=('The file of the knot coefficients of the accelerometer bias B spline.'
-                  ' If not specified, it will be deduced from the pose_file!'))
+                  ' If not specified, its path will be deduced from the pose_file!'))
     groupSim.add_argument('--output_dir', help='Where to put output files?')
     groupSim.add_argument('--bias-from-splines', action='store_true', dest='biasFromSplines',
-                          help=('Simulate IMU biases from provided bias splines? '
-                               'Or else generate noise per IMU parameters.'))
+                          help=('If true, simulate IMU biases and zero noise from provided bias splines. '
+                               'Or else, simulate IMU noise per IMU parameters. (default: %s)'))
     groupSim.add_argument('--dont-show-report', action='store_true', dest='dontShowReport',
-                          help='Do not show the report on screen after simulation.')
+                          help='Do not show the report on screen after simulation. (default: %s)')
 
     #configuration files
     groupCam = parser.add_argument_group('Camera system configuration')
@@ -92,9 +93,6 @@ def parseArgs():
     groupImu = parser.add_argument_group('IMU configuration')
     groupImu.add_argument('--imu', dest='imu_yaml', help=('Yaml holding the IMU noise parameters.'
             ' Thanks to the ConfigReader, no hierarchy should be used in the yaml.'))
-    groupImu.add_argument('--imu-model', dest='imu_model', help= \
-            ('The IMU models to estimate. Currently supported are \'calibrated\','
-             ' \'scale-misalignment\' and \'scale-misalignment-size-effect\'.'))
 
     groupTarget = parser.add_argument_group('Calibration target')
     groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file',
@@ -119,9 +117,6 @@ def main():
         parsed.gyro_bias_file = parsed.pose_file.replace('pose', 'gyro_bias', 1)
     if not parsed.acc_bias_file:
         parsed.acc_bias_file = parsed.pose_file.replace('pose', 'acc_bias', 1)
-
-    if parsed.imu_yaml and not parsed.imu_model:
-        parsed.imu_model = 'calibrated'
 
     if parsed.imu_yaml:
         simulator = Simulator.RsCameraImuSimulator(parsed)

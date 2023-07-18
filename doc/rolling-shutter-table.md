@@ -57,7 +57,7 @@ DJI Inspire 1|FC300X|4000x3000|rolling|1/2.3” CMOS|perspective|85/70|30
 senseFly eBee|Canon S110|4000x3000|global|1/1.7” CMOS|perspective|71/56|0
 
 
-### Table 5 The readout time estimated by a LED panel.
+### Table 5 The readout time estimated by a LED panel [5].
 | Camera      | Resolution  | Frame rate | Mean line delay | Line delay std. dev. | Nominal frame readout time | Mean frame readout time* | Frame readout time std. dev. | #Estimates |
 | - | - | - | - | - | - | - | - | - |
 | name and identifier | px x px | Hz | microsecond | microsecond | millisecond | millisecond | millisecond | 1 |
@@ -75,3 +75,5 @@ Zenfone AR|1280x720| 26 | 10.3|0.43|5.469|7.42|0.31|100
 [3] L. Oth, P. Furgale, L. Kneip and R. Siegwart, "Rolling Shutter Camera Calibration," 2013 IEEE Conference on Computer Vision and Pattern Recognition, 2013, pp. 1360-1367, doi: 10.1109/CVPR.2013.179.
 
 [4] J. Vautherin, S. Rutishauser, K. Schneider-Zapp, H. F. Choi, V. Chovancova, A. Glass, and C. Strecha, "Photogrammetric accuracy and modeling of rolling shutter cameras," ISPRS Annals of Photogrammetry, Remote Sensing & Spatial Information Sciences, 3(3), 2016.
+
+[5] J. Huai, Y. Zhuang, B. Wang, C. Zhang, Y. Shao, J. Tang, and A. Yilmaz, "Automated rolling shutter calibration with an LED panel," Optics Letters 48, 847-850, 2023.

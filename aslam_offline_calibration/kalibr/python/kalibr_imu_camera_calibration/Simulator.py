@@ -102,6 +102,7 @@ class RsCameraSimulator(object):
         numCameras = self.chain.numCameras()
         for i in range(numCameras):
             camConfig = self.chain.getCameraParameters(i)
+            print("Camera {}:".format(i))
             camConfig.printDetails()
             printExtraCameraDetails(camConfig)
             # These parameters are set to default values assuming no IMU is present.
@@ -307,7 +308,7 @@ class RsCameraSimulator(object):
                 xnoise = gauss(0.0, reprojectionSigma)
                 ynoise = gauss(0.0, reprojectionSigma)
                 imageCornerProjectedOffset.append(np.linalg.norm([xnoise, ynoise]))
-                frameKeypoints.append((iota, kpId, lastImagePoint[0, 0] + xnoise, lastImagePoint[1, 0] + ynoise, 12))
+                frameKeypoints.append((iota, kpId, lastImagePoint[0, 0] + xnoise, lastImagePoint[1, 0] + ynoise, reprojectionSigma, 12, -1))
                 kpId += 1
                 continue
             # solve y=g(y) where y is the vertical projection in pixels
@@ -384,11 +385,12 @@ class RsCameraSimulator(object):
         bins = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, \
                 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 9.0, 10.0]
 
-        frameKeypointList = list()
-
         landmarkObservations = dict()
         for iota in range(self.targetObservation.getTotalTargetPoint()):
             landmarkObservations[iota] = list()
+        frameKeypointMap = dict()
+        for vertexId, state_time in enumerate(trueFrameTimes):
+            frameKeypointMap[vertexId] = list()
 
         for cameraIndex in range(self.chain.numCameras()):
             cameraTimeOffset = self.chain.getTimeshiftCamImu(cameraIndex)
@@ -406,13 +408,13 @@ class RsCameraSimulator(object):
                     print('  Projected {:d} target landmarks for state at {:.9f}'.format(len(noisyKeypoints), frameTime))
                 for keypoint in noisyKeypoints:
                     landmarkObservations[keypoint[0]].append((vertexId, cameraIndex, keypoint[1]))
-                frameKeypointList.append((acv.Time(rawFrameTime), vertexId, cameraIndex, noisyKeypoints))
+                frameKeypointMap[vertexId].append((acv.Time(rawFrameTime), cameraIndex, noisyKeypoints))
 
         observationCsv = os.path.join(outputDir, "observations.csv")
         kc.VimapCsvWriter.saveObservations(landmarkObservations, observationCsv)
 
         trackCsv = os.path.join(outputDir, "tracks.csv")
-        kc.VimapCsvWriter.saveTracks(frameKeypointList, trackCsv)
+        kc.VimapCsvWriter.saveTracks(frameKeypointMap, trackCsv)
 
         print('  Written landmark observations to {}'.format(observationCsv))
         print('  Histogram of norm of the offset due to line delay and noise')
@@ -461,10 +463,12 @@ class RsCameraSimulator(object):
         :return:
         """
         yamlfile = os.path.join(outputDir, "camchain.yaml")
-        monocamchain = kc.CameraChainParameters(yamlfile, createYaml=True)
-        camParams = self.chain.getCameraParameters(0)
-        monocamchain.addCameraAtEnd(camParams)
-        monocamchain.writeYaml()
+        mycamchain = kc.CameraChainParameters(yamlfile, createYaml=True)
+        numCams = self.chain.numCameras()
+        for i in range(numCams):
+            camParams = self.chain.getCameraParameters(i)
+            mycamchain.addCameraAtEnd(camParams)
+        mycamchain.writeYaml()
 
     def simulate(self, outputDir):
         self.simulateLandmarks(outputDir)
@@ -606,7 +610,6 @@ class RsCameraImuSimulator(RsCameraSimulator):
     def simulateStates(self, outputDir):
         """
         save poses for every image at timestamp in camera clock.
-        Because of the format of vertices.csv, we only support monocular camera - IMU setup.
         """
         cameraRate = self.computeCameraRate(0)
         timePadding = 2.5 / cameraRate

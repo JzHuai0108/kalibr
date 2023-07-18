@@ -17,22 +17,21 @@ def saveObservations(landmarkObservations, observationCsv):
                 stream.write('{}, {}, {}, {}\n'.format(observation[0], observation[1], observation[2], landmarkId))
 
 
-def saveTracks(frameKeypointList, trackCsv):    
+def saveTracks(frameKeypointMap, trackCsv):
     with open(trackCsv, 'w') as stream:
         header = ', '.join(
             ["timestamp [ns]", "vertex index", "frame index", "keypoint index", "keypoint measurement 0 [px]",
                 "keypoint measurement 1 [px]", "keypoint measurement uncertainty", "keypoint scale",
                 "keypoint track id"])
         stream.write('{}\n'.format(header))
-        for index, frameKeypoints in enumerate(frameKeypointList):
-            timeString = acvTimeToNanosecondString(frameKeypoints[0])
-            vertexId = frameKeypoints[1]
-            cameraId = frameKeypoints[2]
-            for keypoint in frameKeypoints[3]:
-                stream.write('{}, {}, {}, {:d}, {:.5f}, {:.5f}, {}, {}, {}\n'.format(
-                    timeString, vertexId, cameraId, keypoint[1], keypoint[2], keypoint[3], keypoint[4],
-                    keypoint[5], keypoint[6]))
-
+        for vertexId, frameKeypointList in frameKeypointMap.items():
+            for frameKeypoints in frameKeypointList:
+                timeString = acvTimeToNanosecondString(frameKeypoints[0])
+                cameraId = frameKeypoints[1]
+                for keypoint in frameKeypoints[2]:
+                    stream.write('{}, {}, {}, {:d}, {:.5f}, {:.5f}, {}, {}, {}\n'.format(
+                        timeString, vertexId, cameraId, keypoint[1], keypoint[2], keypoint[3], keypoint[4],
+                        keypoint[5], keypoint[6]))
 
 def findNearestTimeSince(timeList, index, time):
     """
