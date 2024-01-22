@@ -98,11 +98,13 @@ def createParser():
     groupOpt.add_argument('--no-time-calibration', action='store_true', dest='no_time', help='Disable the temporal calibration', required=False)      
     groupOpt.add_argument('--max-iter', type=int, default=30, dest='max_iter', help='Max. iterations (default: %(default)s)', required=False)
     groupOpt.add_argument('--recover-covariance', action='store_true', dest='recover_cov', help='Recover the covariance of the design variables.', required=False)
-    groupOpt.add_argument('--timeoffset-padding', type=float, default=30.e-3, dest='timeoffset_padding', help='Maximum range in which the timeoffset may change during estimation [s] (default: %(default)s)', required=False)
+    groupOpt.add_argument('--timeoffset-padding', type=float, default=30.e-3, dest='timeoffset_padding', 
+                          help='Maximum range in which the timeoffset may change during estimation [s]. '
+                               'Pad the spline\'s two boundaries by this amount of time. (default: %(default)s)', required=False)
     groupOpt.add_argument('--timeoffset-pattern', type=float, default=30.e-3, dest='timeoffset_pattern',
-                          help='A time offset to pad the blocks generated in the hessian/jacobian to ensure'
-                               ' a constant symbolic representation of the batch estimation problem, even when a change'
-                               ' in the shutter timing shifts the capture time to another spline segment.')
+                          help='Extend an camera observation\'s control vertex span in time from [0.0, 0.0]'
+                               ' to [-pattern, pattern] so as to allow the relevant control vertices slide '
+                               'in between when estimating the time offset.')
     groupOpt.add_argument('--pose_knots_per_second', type=int, default=100,
                           help='Pose knots per second (default: %(default)s)')
     groupOpt.add_argument('--bias_knots_per_second', type=int, default=50,

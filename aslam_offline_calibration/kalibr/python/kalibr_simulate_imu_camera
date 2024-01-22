@@ -122,7 +122,7 @@ def main():
         simulator = Simulator.RsCameraImuSimulator(parsed)
     else:
         simulator = Simulator.RsCameraSimulator(parsed)
-    simulator.checkNaiveVsNewtonRsProjection(parsed.output_dir)
+    # simulator.checkNaiveVsNewtonRsProjection(parsed.output_dir)
     simulator.simulate(parsed.output_dir)
 
 
