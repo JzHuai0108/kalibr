@@ -104,6 +104,18 @@ def generateAprilBoard(canvas, n_cols, n_rows, tagSize, tagSpacing=0.25, tagFami
     #create one tag
     numTags = n_cols*n_rows
 
+    # Calculate the bounding box
+    xmin = 0
+    ymin = 0
+    xmax = n_cols * (1+tagSpacing) * tagSize + tagSpacing * tagSize
+    ymax = n_rows * (1+tagSpacing) * tagSize + tagSpacing * tagSize
+    bbox = (xmin, ymin, xmax, ymax)
+    border_bbox = bbox
+    border_rect = path.rect(border_bbox[0], border_bbox[1],
+                            border_bbox[2] - border_bbox[0],
+                            border_bbox[3] - border_bbox[1])
+    c.fill(border_rect, [color.rgb.white])
+
     #draw tags
     for y in range(0,n_rows):
         for x in range(0,n_cols):
@@ -112,7 +124,6 @@ def generateAprilBoard(canvas, n_cols, n_rows, tagSize, tagSpacing=0.25, tagFami
                 pos = ( x*(1+tagSpacing)*tagSize, y*(1+tagSpacing)*tagSize)
                 generateAprilTag(canvas, pos, tagSize, tagSpacing, id, tagFamililyData, rotation=2)
                 #c.text(pos[0]+0.45*tagSize, pos[1]-0.7*tagSize*tagSpacing, "{0}".format(id))
-    
     #draw axis
     pos = ( -1.5*tagSpacing*tagSize, -1.5*tagSpacing*tagSize)
     c.stroke(path.line(pos[0], pos[1], pos[0]+tagSize*0.3, pos[1]),
@@ -128,8 +139,47 @@ def generateAprilBoard(canvas, n_cols, n_rows, tagSize, tagSpacing=0.25, tagFami
     c.text(pos[0], pos[1]+tagSize*0.3, "y")
 
     #text
-    caption = "{0}x{1} tags, size={2}cm and spacing={3}cm".format(n_cols,n_rows,tagSize,tagSpacing*tagSize)
+    caption = "{0}x{1} tags, size={2:.2f} cm and spacing={3:.2f} cm".format(n_cols,n_rows,tagSize,tagSpacing*tagSize)
     c.text(pos[0]+0.6*tagSize, pos[0], caption)
+
+
+def cutHoles(c, n_cols, n_rows, tagSize, holeRadius, tagSpacing, draw_reflector=False):
+    #convert to cm
+    tagSize = tagSize*100.0
+    holeRadius = holeRadius*100.0
+    multiplier = 1 + tagSpacing
+    holeGapH = tagSize * (multiplier * (n_cols - 2) + tagSpacing) - holeRadius * (2 + math.sqrt(2))
+    holeGapV = tagSize * (multiplier * (n_rows - 2) + tagSpacing) - holeRadius * (2 + math.sqrt(2))
+    print("holeGapH: {0:.2f} cm, holeGapV: {1:.2f} cm".format(holeGapH, holeGapV))
+
+    # Note the origin is at the corner between the first small black square and the first apriltag.
+    rh = holeRadius * math.sqrt(2) / 2
+    centers = [(tagSize + rh, tagSize + rh),
+               (tagSize + rh, tagSize + rh + holeRadius * 2 + holeGapV),
+               (tagSize + rh + holeRadius * 2 + holeGapH, tagSize + rh),
+               (tagSize + rh + holeRadius * 2 + holeGapH, tagSize + rh + holeRadius * 2 + holeGapV)]
+    for pos in centers:
+        c.fill(path.circle(pos[0], pos[1], holeRadius), [color.rgb.white])
+
+    if draw_reflector:
+        # draw a regular triangle at the center of the board
+        ra = 77.6 / 10 # the height of a corner reflector in cm
+        rc = ra * math.sqrt(2)
+        halfrc = rc / 2
+        rh = rc / 2 * math.sqrt(3)
+        rhtwothirds = rh * 2 / 3
+        center = (tagSize * (multiplier * n_cols - tagSpacing) / 2, tagSize * (multiplier * n_rows - tagSpacing) / 2)
+        x1, y1 = center[0], center[1] + rhtwothirds
+        x2, y2 = center[0] - halfrc, center[1] - rh / 3
+        x3, y3 = center[0] + halfrc, center[1] - rh / 3
+
+        # Create a path object for the triangle
+        triangle_path = path.path(path.moveto(x1, y1),
+                                path.lineto(x2, y2),
+                                path.lineto(x3, y3),
+                                path.closepath())
+        fill_color = [color.gray(0.8)]
+        c.fill(triangle_path, fill_color)
 
 
 def generateCheckerboard(canvas, n_cols, n_rows, size_cols, size_rows):
@@ -161,6 +211,8 @@ if __name__ == "__main__":
         kalibr_create_target_pdf --type apriltag --nx 6 --ny 6 --tsize 0.08 --tspace 0.3
     Example Checkerboard:
         kalibr_create_target_pdf --type checkerboard --nx 6 --ny 6 -csx 0.05 --csy 0.1
+    Example python3 ./src/kalibr/aslam_offline_calibration/kalibr/python/kalibr_create_target_pdf \
+        --type apriltag --nx 6 --ny 6 --tsize 0.14 --tspace 0.3 --cut-holes --hole-radius=0.20
     """
     
     #setup the argument list
@@ -172,6 +224,7 @@ if __name__ == "__main__":
     
     genericOptions = parser.add_argument_group('Generic grid options')    
     genericOptions.add_argument('--type', dest='gridType', help='The grid pattern type. (\'apriltag\' or \'checkerboard\')')
+    genericOptions.add_argument('--cut-holes', action='store_true', dest='cutHoles', help='Cut holes in the apriltags for lidar extrinsic calibration')
     genericOptions.add_argument('--nx', type=int, default=6, dest='n_cols', help='The number of tags in x direction (default: %(default)s)\n')
     genericOptions.add_argument('--ny', type=int, default=7, dest='n_rows', help='The number of tags in y direction (default: %(default)s)')
 
@@ -180,6 +233,7 @@ if __name__ == "__main__":
     aprilOptions.add_argument('--tspace', type=float, default=0.3, dest='tagspacing', help='The space between the tags in fraction of the edge size [0..1] (default: %(default)s)')
     aprilOptions.add_argument('--tfam', default='t36h11', dest='tagfamiliy', help='Familiy of April tags {0} (default: %(default)s)'.format(list(AprilTagCodes.TagFamilies.keys()))) 
     aprilOptions.add_argument('--skip-ids', default='', dest='skipIds', help='Space-separated list of tag ids to leave blank (default: none)')
+    aprilOptions.add_argument('--hole-radius', type=float, default=0.08 * 1.3, dest='holeRadius', help=('The radius of the holes [m] (default: %(default)s)'))
 
     checkerOptions = parser.add_argument_group('Checkerboard arguments')    
     checkerOptions.add_argument('--csx', type=float, default=0.05, dest='chessSzX', help='The size of one chessboard square in x direction [m] (default: %(default)s)')
@@ -204,12 +258,15 @@ if __name__ == "__main__":
     #draw the board
     if parsed.gridType == "apriltag":
         generateAprilBoard(canvas, parsed.n_cols, parsed.n_rows, parsed.tsize, parsed.tagspacing, parsed.tagfamiliy, parsed.skipIds)
+        if parsed.cutHoles:
+            cutHoles(c, parsed.n_cols, parsed.n_rows, parsed.tsize, parsed.holeRadius, parsed.tagspacing)
+
     elif parsed.gridType == "checkerboard":
         generateCheckerboard(c, parsed.n_cols, parsed.n_rows, parsed.chessSzX, parsed.chessSzY)
     else:
         print("[ERROR]: Unknown grid pattern")
         sys.exit(0)
-            
+
     #write to file
     c.writePDFfile(parsed.output)
     
