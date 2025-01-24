@@ -243,6 +243,7 @@ void exportGridCalibration() {
     .def_readwrite("filterCornerOutliers", &GridDetector::GridDetectorOptions::filterCornerOutliers)
     .def_readwrite("filterCornerSigmaThreshold", &GridDetector::GridDetectorOptions::filterCornerSigmaThreshold)
     .def_readwrite("filterCornerMinReprojError", &GridDetector::GridDetectorOptions::filterCornerMinReprojError)
+    .def_readwrite("invertImage", &GridDetector::GridDetectorOptions::invertImage)
     .def_pickle(sm::python::pickle_suite<GridDetector::GridDetectorOptions>());
 
   class_<GridDetector, boost::shared_ptr<GridDetector>, boost::noncopyable>(
@@ -253,6 +254,8 @@ void exportGridCalibration() {
       .def("initCameraGeometryFromObservations", &initCameraGeometryFromObservations)
       .def("geometry", &GridDetector::geometry)
       .def("target",&GridDetector::target)
+      .def("options", &GridDetector::options)
+      .def("setOptions", &GridDetector::setOptions)
       .def("findTarget", &findTarget1)
       .def("findTarget", &findTarget2)
       .def("findTargetNoTransformation", &findTargetNoTransformation1)

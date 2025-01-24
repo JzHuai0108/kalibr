@@ -26,7 +26,8 @@ class GridDetector {
       imageStepping(false),
       filterCornerOutliers(false),
       filterCornerSigmaThreshold(2.0),
-      filterCornerMinReprojError(0.2) {};
+      filterCornerMinReprojError(0.2),
+      invertImage(false) {};
 
     //options
     /// \brief plot the reprojection of the extraced corners during extraction
@@ -45,6 +46,8 @@ class GridDetector {
     /// \brief filter corner outliers: filtering is only active above this reprojection threshold for a corner
     float filterCornerMinReprojError;
 
+    bool invertImage;
+
     /// \brief Serialization
     enum {CLASS_SERIALIZATION_VERSION = 1};
     BOOST_SERIALIZATION_SPLIT_MEMBER()
@@ -58,6 +61,7 @@ class GridDetector {
        ar << BOOST_SERIALIZATION_NVP(filterCornerOutliers);
        ar << BOOST_SERIALIZATION_NVP(filterCornerSigmaThreshold);
        ar << BOOST_SERIALIZATION_NVP(filterCornerMinReprojError);
+       ar << BOOST_SERIALIZATION_NVP(invertImage);
     }
     template<class Archive>
     void load(Archive & ar, const unsigned int /*version*/)
@@ -67,6 +71,7 @@ class GridDetector {
        ar >> BOOST_SERIALIZATION_NVP(filterCornerOutliers);
        ar >> BOOST_SERIALIZATION_NVP(filterCornerSigmaThreshold);
        ar >> BOOST_SERIALIZATION_NVP(filterCornerMinReprojError);
+       ar >> BOOST_SERIALIZATION_NVP(invertImage);
     }
   };
 
@@ -100,6 +105,14 @@ class GridDetector {
   GridCalibrationTargetBase::Ptr target() const {
     return _target;
   };
+
+  GridDetectorOptions options() const {
+    return _options;
+  }
+
+  void setOptions(const GridDetectorOptions &options) {
+    _options = options;
+  }
 
   /// \brief Find the target in the image. Return true on success.
   ///

@@ -95,7 +95,8 @@ bool GridDetector::findTargetNoTransformation(const cv::Mat & image, const aslam
   // Extract the calibration target corner points
   Eigen::MatrixXd cornerPoints;
   std::vector<bool> validCorners;
-  success = _target->computeObservation(image, cornerPoints, validCorners);
+  cv::Mat detect_img = _options.invertImage ? (255 - image) : image;
+  success = _target->computeObservation(detect_img, cornerPoints, validCorners);
 
   // Set the image, target, and timestamp regardless of success.
   outObservation.setTarget(_target);

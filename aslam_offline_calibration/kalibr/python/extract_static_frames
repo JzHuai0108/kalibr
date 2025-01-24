@@ -7,6 +7,7 @@ a rolling shutter camera.
 """
 
 import argparse
+import copy
 import os
 import signal
 import sys
@@ -31,6 +32,7 @@ def parseArgs():
                            help='Use the bag data starting from up to this time [s]')
     parser.add_argument('--topics', nargs='+', type=str, default=["/cam0/image_raw"], dest='topics',
                         help='The image topics within the input rosbag')
+    parser.add_argument("--invert_image", action="store_true", help="Invert the image (make a negative).")
 
     groupTarget = parser.add_argument_group('Calibration target')
     groupTarget.add_argument('--target', dest='target_yaml', help='Calibration target configuration as yaml file')
@@ -73,7 +75,7 @@ def signal_exit(signal, frame):
 
 
 def extractCorners(bagfile, image_topics, target_yaml,
-                   bag_from_to = None, showextraction = False, verbose = False):
+                   bag_from_to = None, showextraction = False, verbose = False, invertImage=False):
     """
 
     :param bagfile:
@@ -100,7 +102,9 @@ def extractCorners(bagfile, image_topics, target_yaml,
         cameraModel = cameraModels[modelName]
         cam = kcc.CameraGeometry(cameraModel, targetConfig, dataset,
                                  verbose=(verbose or showextraction))
-
+        detectorOptions = copy.deepcopy(cam.ctarget.detector.options())
+        detectorOptions.invertImage = invertImage
+        cam.ctarget.detector.setOptions(detectorOptions)
         multithreading = not (verbose or showextraction)
         observations = kc.extractCornersFromDataset(cam.dataset, cam.ctarget.detector,
                                                     multithreading=multithreading, clearImages=False,
@@ -158,7 +162,7 @@ def selectStaticFramesWithOpticFlow():
 
     camChainObservations = extractCorners(parsed.bagfile, parsed.topics,
                                           parsed.target_yaml, parsed.bag_from_to,
-                                          parsed.showextraction, parsed.verbose)
+                                          parsed.showextraction, parsed.verbose, parsed.invert_image)
 
     # compute optic flow between frames
     camChainOpticFlow = []  # optic flow for every frame of every camera
@@ -290,6 +294,7 @@ def selectStaticFramesWithOpticFlow():
                 break
 
     print('Saved {} static frames out of {} frames!'.format(imageCount, len(imageDatasetReader.indices)))
+    timeStream.close()
     bag.close()
 
 

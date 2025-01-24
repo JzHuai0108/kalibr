@@ -81,13 +81,14 @@ bool GridCalibrationTargetCirclegrid::computeObservation(const cv::Mat & image,
     cv::drawChessboardCorners(imageCopy1, cv::Size(rows(), cols()), centers, true);
 
     // write error msg
-    if (!success)
+    if (!success) {
       cv::putText(imageCopy1, "Detection failed! (frame not used)",
                   cv::Point(50, 50), cv::FONT_HERSHEY_SIMPLEX, 0.8,
                   CV_RGB(255,0,0), 3, 8, false);
-
-    cv::imshow("Circlegrid corners", imageCopy1);  // OpenCV call
-    cv::waitKey(1);
+    } else {
+      cv::imshow("Circlegrid corners", imageCopy1);  // OpenCV call
+      cv::waitKey(1);
+    }
   }
 
   //exit here if there is an error
