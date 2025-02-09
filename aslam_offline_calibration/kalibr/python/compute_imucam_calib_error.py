@@ -95,6 +95,7 @@ def main():
 
     deltaTime = referenceChain.getTimeshiftCamImu(camNr) - estimatedChain.getTimeshiftCamImu(camNr)
     deltaTime = deltaTime * 1000000
+    td = estimatedChain.getTimeshiftCamImu(camNr) * 1000
     deltaLineDelay = estimatedChain.getLineDelay(camNr) / 1000.0
 
     statList = parseImuCameraCalibrationResult(resulttxt)
@@ -102,11 +103,11 @@ def main():
     existingCsv = os.path.isfile(outputCsv)
     with open(outputCsv, 'a') as stream:
         if not existingCsv:
-            stream.write("folder, translation_error(mm), rotation error(deg), time offset error(us), line delay (us), "
-                         "reprojection error (mean, median, std), gyro error (mean, median, std), "
+            stream.write("folder, translation_error(mm), rotation error(deg), time offset error(us), time offset(ms), line delay (us), "
+                         "reprojection error (mean, median, std, terms), gyro error (mean, median, std), "
                          "accel error (mean, median, std)\n")
-        stream.write("{}, {}, {}, {}, {}, {}\n".format(
-            folder, translationError, rotationError, deltaTime, deltaLineDelay, ', '.join(map(str, statList))))
+        stream.write("{}, {}, {}, {}, {}, {}, {}\n".format(
+            folder, translationError, rotationError, deltaTime, td, deltaLineDelay, ', '.join(map(str, statList))))
 
 
 if __name__ == '__main__':
