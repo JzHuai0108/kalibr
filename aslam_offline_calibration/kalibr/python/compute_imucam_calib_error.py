@@ -29,9 +29,16 @@ def parseMeanMedianStd(line):
     numbers = clearline.split()
     return map(float, numbers)
 
+def parseGravityLine(line):
+    dict = {'[' : '', '  ': ' ', ']' : ''}
+    clearline = replace_all(line, dict)
+    numbers = clearline.split()
+    return [float(numbers[0]), float(numbers[1]), float(numbers[2])]
+
 
 def parseImuCameraCalibrationResult(resulttxt):
     statList = []
+    nextgravity = False
     with open(resulttxt, 'r') as stream:
         for line in stream:
             if 'Reprojection error ' in line and '[px]' in line:
@@ -42,6 +49,12 @@ def parseImuCameraCalibrationResult(resulttxt):
                 statList.extend(stats)
             if 'Accelerometer error ' in line and '[m/s^2]' in line:
                 stats = parseMeanMedianStd(line)
+                statList.extend(stats)
+            if 'Gravity vector in target coords' in line:
+                nextgravity = True
+                continue
+            if nextgravity:
+                stats = parseGravityLine(line)
                 statList.extend(stats)
                 break
     return statList
@@ -66,13 +79,15 @@ def findFileInDir(folder, namekeys):
 
 def main():
     if len(sys.argv) < 4:
-        print("Usage: {} <calibration result folder> <reference yaml> <output csv file in append mode>".format(
+        print("Usage: {} <calibration result folder> <reference camimu yaml> "
+              "<reference IMU yaml> <output csv file in append mode>".format(
             sys.argv[0]))
         sys.exit(1)
 
     folder = sys.argv[1]
     referenceYaml = sys.argv[2]
-    outputCsv = sys.argv[3]
+    referenceImuYaml = sys.argv[3]
+    outputCsv = sys.argv[4]
 
     if not os.path.isdir(folder):
         print("Calibration result {} does not exist!".format(folder))
@@ -85,30 +100,48 @@ def main():
 
     estimatedChain = kc.CameraChainParameters(camimuyaml)
     referenceChain = kc.CameraChainParameters(referenceYaml)
-    camNr = 0
-    T_cam_imu = estimatedChain.getExtrinsicsImuToCam(camNr)
-    ref_T_cam_imu = referenceChain.getExtrinsicsImuToCam(camNr)
-    deltaT = ref_T_cam_imu.inverse() * T_cam_imu
-    translationError = np.linalg.norm(deltaT.t()) * 1000
-    rotationVector = sm.quat2AxisAngle(deltaT.q())
-    rotationError = abs(math.atan(math.tan(np.linalg.norm(rotationVector))) * 180 / math.pi)
+    numCams = estimatedChain.numCameras()
+    calibErrors = []
+    for camNr in range(numCams):
+        T_cam_imu = estimatedChain.getExtrinsicsImuToCam(camNr)
+        ref_T_cam_imu = referenceChain.getExtrinsicsImuToCam(camNr)
+        deltaT = ref_T_cam_imu.inverse() * T_cam_imu
+        translationError = np.linalg.norm(deltaT.t()) * 1000
+        rotationVector = sm.quat2AxisAngle(deltaT.q())
+        rotationError = abs(math.atan(math.tan(np.linalg.norm(rotationVector))) * 180 / math.pi)
 
-    deltaTime = referenceChain.getTimeshiftCamImu(camNr) - estimatedChain.getTimeshiftCamImu(camNr)
-    deltaTime = deltaTime * 1000000
-    td = estimatedChain.getTimeshiftCamImu(camNr) * 1000
-    deltaLineDelay = estimatedChain.getLineDelay(camNr) / 1000.0
+        deltaTime = referenceChain.getTimeshiftCamImu(camNr) - estimatedChain.getTimeshiftCamImu(camNr)
+        deltaLineDelay = estimatedChain.getLineDelay(camNr) / 1000.0
+        calibErrors.append([deltaT.t(), rotationVector, deltaTime, deltaLineDelay])
 
     statList = parseImuCameraCalibrationResult(resulttxt)
+    referenceImu = kc.ImuParameters(referenceImuYaml)
+    refgravity = referenceImu.getGravityInTarget()
+    refunitgravity = refgravity / np.linalg.norm(refgravity)
+    gravity = np.array(statList[-3:])
+    unitgravity = gravity / np.linalg.norm(gravity)
+    unitgravityerror = refunitgravity - unitgravity
 
     existingCsv = os.path.isfile(outputCsv)
     with open(outputCsv, 'a') as stream:
-        if not existingCsv:
-            stream.write("folder, translation_error(mm), rotation error(deg), time offset error(us), time offset(ms), line delay (us), "
-                         "reprojection error (mean, median, std, terms), gyro error (mean, median, std), "
-                         "accel error (mean, median, std)\n")
-        stream.write("{}, {}, {}, {}, {}, {}, {}\n".format(
-            folder, translationError, rotationError, deltaTime, td, deltaLineDelay, ', '.join(map(str, statList))))
+        # if not existingCsv:
+        #     stream.write("folder, translation_error(mm), rotation error(deg), time offset error(us), line delay (us), "
+        #                  "reprojection error (mean, median, std), gyro error (mean, median, std), "
+        #                  "accel error (mean, median, std)\n")
+        # stream.write("{}, {}, {}, {}, {}, {}\n".format(
+        #     folder, translationError, rotationError, deltaTime, deltaLineDelay, ', '.join(map(str, statList))))
 
+        if not existingCsv:
+            stream.write("folder, translation_error(cam0), rotation error(cam0), translation_error(cam1), rotation error(cam1),"
+                         " time offset error(cam0, us), time offset error(cam1, us), unit gravity error, line delay (us), "
+                         "reprojection error (mean, median, std), gyro error (mean, median, std), "
+                         "accel error (mean, median, std)\n")
+        stream.write("{}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(
+            folder, ','.join(map(str, calibErrors[0][0])), ','.join(map(str, calibErrors[0][1])),
+            ','.join(map(str, calibErrors[1][0])), ','.join(map(str, calibErrors[1][1])),
+            calibErrors[0][2], calibErrors[1][2],
+            ','.join(map(str, unitgravityerror)),
+            deltaLineDelay, ','.join(map(str, statList))))
 
 if __name__ == '__main__':
     main()
